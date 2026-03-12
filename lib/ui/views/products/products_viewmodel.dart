@@ -48,6 +48,7 @@ class ProductsViewModel extends ReactiveViewModel {
 
   StreamSubscription<List<Product>>? _productsSub;
   StreamSubscription<List<ProductCategory>>? _categoriesSub;
+  Timer? _searchDebounce;
 
   void initialize() {
     _subscribeToProducts();
@@ -98,7 +99,11 @@ class ProductsViewModel extends ReactiveViewModel {
 
   void onSearchChanged(String query) {
     _searchQuery = query;
-    _subscribeToProducts();
+    _searchDebounce?.cancel();
+    _searchDebounce = Timer(
+      const Duration(milliseconds: 300),
+      _subscribeToProducts,
+    );
   }
 
   void selectCategory(String? slug) {
@@ -138,6 +143,7 @@ class ProductsViewModel extends ReactiveViewModel {
 
   Future<void> _loadMore() async {
     _isLoadingMore = true;
+    notifyListeners();
     try {
       _totalProducts = await _productsRepo.refreshProducts(
         limit: _pageSize,
@@ -147,6 +153,7 @@ class ProductsViewModel extends ReactiveViewModel {
       _hasMore = _currentSkip < _totalProducts;
     } catch (_) {}
     _isLoadingMore = false;
+    notifyListeners();
   }
 
   void navigateToDetail(int id) {
@@ -166,6 +173,7 @@ class ProductsViewModel extends ReactiveViewModel {
 
   @override
   void dispose() {
+    _searchDebounce?.cancel();
     _productsSub?.cancel();
     _categoriesSub?.cancel();
     scrollController.dispose();

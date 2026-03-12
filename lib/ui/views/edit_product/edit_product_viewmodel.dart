@@ -9,23 +9,14 @@ import 'package:offline_first_app/data/repositories/products_repository.dart';
 import 'package:offline_first_app/domain/models/category.dart';
 import 'package:offline_first_app/domain/models/product.dart';
 import 'package:offline_first_app/services/sync_service.dart';
-import 'package:stacked_services/stacked_services.dart' show NavigationService, StackedService;
+import 'package:stacked_services/stacked_services.dart';
 
 class EditProductViewModel extends AppViewModel {
   final _productsRepo = locator<ProductsRepository>();
   final _categoriesRepo = locator<CategoriesRepository>();
   final _navigationService = locator<NavigationService>();
+  final _snackbarService = locator<SnackbarService>();
   final _syncService = locator<SyncService>();
-
-  void _showSnackbar(String message) {
-    final context =
-        StackedService.navigatorKey?.currentContext;
-    if (context != null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(message)),
-      );
-    }
-  }
 
   late Product _product;
 
@@ -66,31 +57,59 @@ class EditProductViewModel extends AppViewModel {
     notifyListeners();
   }
 
+  /// Returns a validation error message, or null if all fields are valid.
+  String? _validate() {
+    if (titleController.text.trim().isEmpty) {
+      return ProductStrings.errorTitleRequired;
+    }
+    final price =
+        double.tryParse(priceController.text.trim());
+    if (price == null || price < 0) {
+      return ProductStrings.errorInvalidPrice;
+    }
+    final stock =
+        int.tryParse(stockController.text.trim());
+    if (stock == null || stock < 0) {
+      return ProductStrings.errorInvalidStock;
+    }
+    if (_selectedCategory == null ||
+        _selectedCategory!.isEmpty) {
+      return ProductStrings.errorCategoryRequired;
+    }
+    return null;
+  }
+
   Future<void> saveProduct() async {
-    final title = titleController.text.trim();
-    if (title.isEmpty) return;
+    final validationError = _validate();
+    if (validationError != null) {
+      _snackbarService.showSnackbar(
+          message: validationError);
+      return;
+    }
 
     final updated = _product.copyWith(
-      title: title,
+      title: titleController.text.trim(),
       description: descriptionController.text.trim(),
-      price:
-          double.tryParse(priceController.text.trim()) ??
-              _product.price,
+      price: double.parse(priceController.text.trim()),
       brand: brandController.text.trim(),
-      stock:
-          int.tryParse(stockController.text.trim()) ??
-              _product.stock,
-      category: _selectedCategory ?? _product.category,
+      stock: int.parse(stockController.text.trim()),
+      category: _selectedCategory!,
     );
 
+    setLoading(true);
     try {
       await _productsRepo.updateProduct(updated);
-      _syncService.syncAll();
-      _showSnackbar(ProductStrings.saveSuccess);
-    } catch (e) {
-      _showSnackbar('Failed to save: $e');
-    } finally {
+      // Fire-and-forget: ConnectivityService also triggers
+      // syncAll on reconnect; sync queue handles retry on failure.
+      _syncService.syncAll().ignore();
+      _snackbarService.showSnackbar(
+          message: ProductStrings.saveSuccess);
       _navigationService.back();
+    } catch (_) {
+      _snackbarService.showSnackbar(
+          message: ProductStrings.errorSaveFailed);
+    } finally {
+      setLoading(false);
     }
   }
 

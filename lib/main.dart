@@ -18,18 +18,27 @@ import 'package:offline_first_app/services/sync_service.dart';
 @pragma('vm:entry-point')
 void callbackDispatcher() {
   Workmanager().executeTask((task, inputData) async {
+    // This runs in a separate isolate — all instances are independent
+    // of the foreground app. Always close the DB when done to avoid
+    // WAL journal corruption on iOS.
     final db = AppDatabase();
-    final apiClient = ApiClient();
-    final connectivity = ConnectivityService();
-    await connectivity.initialize();
-    final syncService = SyncService(
-      syncQueueDao: db.syncQueueDao,
-      productsDao: db.productsDao,
-      apiClient: apiClient,
-      connectivityService: connectivity,
-    );
-    await syncService.syncAll();
-    return true;
+    try {
+      final apiClient = ApiClient();
+      final connectivity = ConnectivityService();
+      await connectivity.initialize();
+      final syncService = SyncService(
+        syncQueueDao: db.syncQueueDao,
+        productsDao: db.productsDao,
+        apiClient: apiClient,
+        connectivityService: connectivity,
+      );
+      await syncService.syncAll();
+      connectivity.dispose();
+      syncService.dispose();
+      return true;
+    } finally {
+      await db.close();
+    }
   });
 }
 

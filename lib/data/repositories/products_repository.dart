@@ -110,15 +110,18 @@ class ProductsRepository implements IProductsRepository {
       limit: limit,
       skip: skip,
     );
-    final data = response.data as Map<String, dynamic>;
-    final productsList = (data['products'] as List)
-        .map((json) =>
-            ProductDto.fromJson(json as Map<String, dynamic>))
-        .toList();
+    final data = response.data;
+    if (data is! Map<String, dynamic>) return 0;
+
+    final productsList =
+        (data['products'] as List? ?? [])
+            .whereType<Map<String, dynamic>>()
+            .map(ProductDto.fromJson)
+            .toList();
     final companions =
         productsList.map(_dtoToCompanion).toList();
     await productsDao.upsertProducts(companions);
-    return data['total'] as int;
+    return (data['total'] as num?)?.toInt() ?? 0;
   }
 
   @override

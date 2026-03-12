@@ -24,6 +24,17 @@ class ProductStrings {
   static const String saveSuccess = 'Product saved';
   static const String createSuccess = 'Product created';
 
+  // Validation errors
+  static const String errorTitleRequired = 'Title is required';
+  static const String errorInvalidPrice =
+      'Price must be 0 or greater';
+  static const String errorInvalidStock =
+      'Stock must be 0 or greater';
+  static const String errorCategoryRequired =
+      'Please select a category';
+  static const String errorSaveFailed =
+      'Failed to save. Please try again';
+
   static String priceLabel(double price) =>
       '\$${price.toStringAsFixed(2)}';
   static String discountLabel(double pct) =>
