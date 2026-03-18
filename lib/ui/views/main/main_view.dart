@@ -1,35 +1,27 @@
 import 'package:flutter/material.dart';
-import 'package:offline_first_app/ui/views/main/main_viewmodel.dart';
+import 'package:flutter_hooks/flutter_hooks.dart';
+import 'package:hooks_riverpod/hooks_riverpod.dart';
+import 'package:offline_first_app/providers/service_providers.dart';
 import 'package:offline_first_app/ui/views/main/widgets/bottom_navbar_wdiget.dart';
 import 'package:offline_first_app/ui/views/products/products_view.dart';
 import 'package:offline_first_app/ui/views/sync_queue/sync_queue_view.dart';
-import 'package:stacked/stacked.dart';
 
-class MainView extends StackedView<MainViewModel> {
+class MainView extends HookConsumerWidget {
   const MainView({super.key});
 
   @override
-  void onViewModelReady(MainViewModel viewModel) {
-    viewModel.initialize();
-    super.onViewModelReady(viewModel);
-  }
+  Widget build(BuildContext context, WidgetRef ref) {
+    final currentIndex = useState(0);
+    final pendingCount =
+        ref.watch(pendingSyncCountProvider).valueOrNull ?? 0;
 
-  @override
-  Widget builder(
-    BuildContext context,
-    MainViewModel viewModel,
-    Widget? child,
-  ) {
-    const screens = [
-      ProductsView(),
-      SyncQueueView(),
-    ];
+    const List<Widget> screens = [ProductsView(), SyncQueueView()];
 
     return Scaffold(
       body: Stack(
         children: [
           IndexedStack(
-            index: viewModel.currentIndex,
+            index: currentIndex.value,
             children: screens,
           ),
           Positioned(
@@ -37,18 +29,13 @@ class MainView extends StackedView<MainViewModel> {
             right: 0,
             bottom: 0,
             child: BottomNavBar(
-              selectedIndex: viewModel.currentIndex,
-              onTabChange: viewModel.onTabChanged,
-              pendingSyncCount:
-                  viewModel.pendingSyncCount,
+              selectedIndex: currentIndex.value,
+              onTabChange: (i) => currentIndex.value = i,
+              pendingSyncCount: pendingCount,
             ),
           ),
         ],
       ),
     );
   }
-
-  @override
-  MainViewModel viewModelBuilder(BuildContext context) =>
-      MainViewModel();
 }
