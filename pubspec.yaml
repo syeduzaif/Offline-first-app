@@ -10,9 +10,8 @@ dependencies:
   flutter:
     sdk: flutter
 
-  # Architecture
-  stacked: ^3.5.0
-  stacked_services: ^1.6.0
+  # State Management
+  flutter_riverpod: ^2.6.1
 
   # UI
   flutter_screenutil: ^5.9.3
@@ -46,7 +45,6 @@ dependencies:
 
 dev_dependencies:
   build_runner: ^2.4.15
-  stacked_generator: ^2.0.0
   flutter_lints: ^6.0.0
   flutter_test:
     sdk: flutter

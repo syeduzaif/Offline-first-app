@@ -1,44 +1,91 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:iconsax/iconsax.dart';
 import 'package:offline_first_app/core/constants/app_colors.dart';
 import 'package:offline_first_app/core/constants/app_layout.dart';
 import 'package:offline_first_app/core/constants/app_paddings.dart';
 import 'package:offline_first_app/core/constants/app_text_styles.dart';
 import 'package:offline_first_app/core/constants/strings/app_strings.dart';
-import 'package:offline_first_app/ui/views/products/products_viewmodel.dart';
+import 'package:offline_first_app/providers/core_providers.dart';
+import 'package:offline_first_app/ui/views/product_detail/product_detail_view.dart';
+import 'package:offline_first_app/ui/views/add_product/add_product_view.dart';
+import 'package:offline_first_app/ui/views/products/products_providers.dart';
 import 'package:offline_first_app/ui/views/products/widgets/category_filter_chips_wdiget.dart';
 import 'package:offline_first_app/ui/views/products/widgets/connectivity_banner_wdiget.dart';
 import 'package:offline_first_app/ui/views/products/widgets/product_card_wdiget.dart';
 import 'package:offline_first_app/ui/views/products/widgets/product_search_bar_wdiget.dart';
 import 'package:offline_first_app/ui/widgets/empty_state_wdiget.dart';
 import 'package:offline_first_app/ui/widgets/loading_indicator_wdiget.dart';
-import 'package:stacked/stacked.dart';
 
-class ProductsView extends StackedView<ProductsViewModel> {
+class ProductsView extends ConsumerStatefulWidget {
   const ProductsView({super.key});
 
   @override
-  void onViewModelReady(ProductsViewModel viewModel) {
-    viewModel.initialize();
-    super.onViewModelReady(viewModel);
+  ConsumerState<ProductsView> createState() => _ProductsViewState();
+}
+
+class _ProductsViewState extends ConsumerState<ProductsView> {
+  final ScrollController _scrollController = ScrollController();
+  Timer? _searchDebounce;
+
+  @override
+  void initState() {
+    super.initState();
+    _scrollController.addListener(_onScroll);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      ref.read(productsPaginationProvider.notifier).initialFetch();
+    });
   }
 
   @override
-  Widget builder(
-    BuildContext context,
-    ProductsViewModel viewModel,
-    Widget? child,
-  ) {
+  void dispose() {
+    _searchDebounce?.cancel();
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  void _onScroll() {
+    if (_scrollController.position.pixels >=
+            _scrollController.position.maxScrollExtent - 200 &&
+        !ref.read(productsPaginationProvider).isLoadingMore &&
+        ref.read(productsPaginationProvider).hasMore) {
+      ref.read(productsPaginationProvider.notifier).loadMore();
+    }
+  }
+
+  void _onSearchChanged(String query) {
+    _searchDebounce?.cancel();
+    _searchDebounce = Timer(
+      const Duration(milliseconds: 300),
+      () => ref
+          .read(productsFilterProvider.notifier)
+          .setSearch(query),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final products =
+        ref.watch(productsProvider).valueOrNull ?? [];
+    final categories =
+        ref.watch(categoriesProvider).valueOrNull ?? [];
+    final filter = ref.watch(productsFilterProvider);
+    final pagination = ref.watch(productsPaginationProvider);
+    final isOnline =
+        ref.watch(connectivityStatusProvider).valueOrNull ?? true;
+    final isSyncing =
+        ref.watch(isSyncingProvider).valueOrNull ?? false;
+    final isLoading = ref.watch(productsProvider).isLoading;
+
     return Scaffold(
       backgroundColor: AppColors.primaryLighter,
       body: SafeArea(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Connectivity banner
-            ConnectivityBanner(
-                isOnline: viewModel.isOnline),
-            // Header
+            ConnectivityBanner(isOnline: isOnline),
             Padding(
               padding: EdgeInsets.only(
                 left: AppPaddings.base,
@@ -54,12 +101,11 @@ class ProductsView extends StackedView<ProductsViewModel> {
                       style: AppTextStyles.h3.bold,
                     ),
                   ),
-                  if (viewModel.isSyncing)
+                  if (isSyncing)
                     SizedBox(
                       width: AppLayout.iconSizeMdSm,
                       height: AppLayout.iconSizeMdSm,
-                      child:
-                          const CircularProgressIndicator(
+                      child: const CircularProgressIndicator(
                         strokeWidth: 2,
                         color: AppColors.primary,
                       ),
@@ -67,70 +113,63 @@ class ProductsView extends StackedView<ProductsViewModel> {
                 ],
               ),
             ),
-            // Search bar
-            ProductSearchBar(
-                onChanged: viewModel.onSearchChanged),
+            ProductSearchBar(onChanged: _onSearchChanged),
             SizedBox(height: AppLayout.height12),
-            // Category chips
             CategoryFilterChips(
-              categories: viewModel.categories,
-              selectedSlug: viewModel.selectedCategory,
-              onSelected: viewModel.selectCategory,
+              categories: categories,
+              selectedSlug: filter.selectedCategory,
+              onSelected: ref
+                  .read(productsFilterProvider.notifier)
+                  .selectCategory,
             ),
             SizedBox(height: AppLayout.height12),
-            // Product list
             Expanded(
               child: RefreshIndicator(
-                onRefresh: viewModel.onRefresh,
+                onRefresh: () => ref
+                    .read(productsPaginationProvider.notifier)
+                    .refresh(),
                 color: AppColors.primary,
-                child: viewModel.products.isEmpty &&
-                        !viewModel.isBusy
+                child: products.isEmpty && !isLoading
                     ? ListView(
                         children: [
-                          SizedBox(
-                              height:
-                                  AppLayout.height140),
+                          SizedBox(height: AppLayout.height140),
                           EmptyState(
-                            message:
-                                ProductStrings.noProducts,
+                            message: ProductStrings.noProducts,
                             icon: Iconsax.box_1,
                           ),
                         ],
                       )
-                    : viewModel.products.isEmpty
+                    : products.isEmpty
                         ? const LoadingIndicator()
                         : ListView.builder(
-                            controller: viewModel
-                                .scrollController,
+                            controller: _scrollController,
                             padding: AppPaddings.only(
                               left: AppPaddings.base,
                               right: AppPaddings.base,
-                              bottom: AppLayout
-                                      .bottomNavBarHeight +
-                                  AppPaddings.base +
-                                  AppPaddings.large,
+                              bottom:
+                                  AppLayout.bottomNavBarHeight +
+                                      AppPaddings.base +
+                                      AppPaddings.large,
                             ),
-                            itemCount: viewModel
-                                    .products.length +
-                                (viewModel.hasMore
-                                    ? 1
-                                    : 0),
-                            itemBuilder:
-                                (context, index) {
-                              if (index >=
-                                  viewModel
-                                      .products.length) {
+                            itemCount: products.length +
+                                (pagination.hasMore ? 1 : 0),
+                            itemBuilder: (context, index) {
+                              if (index >= products.length) {
                                 return const LoadingIndicator();
                               }
-                              final product = viewModel
-                                  .products[index];
+                              final product = products[index];
                               return ProductCard(
-                                key: ValueKey(
-                                    product.id),
+                                key: ValueKey(product.id),
                                 product: product,
-                                onTap: () => viewModel
-                                    .navigateToDetail(
-                                        product.id),
+                                onTap: () =>
+                                    Navigator.of(context).push(
+                                  MaterialPageRoute(
+                                    builder: (_) =>
+                                        ProductDetailView(
+                                      productId: product.id,
+                                    ),
+                                  ),
+                                ),
                               );
                             },
                           ),
@@ -144,7 +183,11 @@ class ProductsView extends StackedView<ProductsViewModel> {
           bottom: AppLayout.bottomNavBarHeight,
         ),
         child: FloatingActionButton(
-          onPressed: viewModel.navigateToAddProduct,
+          onPressed: () => Navigator.of(context).push(
+            MaterialPageRoute(
+              builder: (_) => const AddProductView(),
+            ),
+          ),
           backgroundColor: AppColors.primary,
           child: Icon(
             Iconsax.add,
@@ -155,8 +198,4 @@ class ProductsView extends StackedView<ProductsViewModel> {
       ),
     );
   }
-
-  @override
-  ProductsViewModel viewModelBuilder(BuildContext context) =>
-      ProductsViewModel();
 }
