@@ -30,7 +30,11 @@
   3. `ConnectivityService` and `SyncService` no longer use `ListenableServiceMixin`; the `isSyncing` and connectivity signals are observable via Riverpod providers, and all three screens that depend on them (`ProductsView`, `MainView`, `SyncQueueView`) still display correct sync status
   4. All repository providers (`productsRepositoryProvider`, `categoriesRepositoryProvider`) and infrastructure providers (`appDatabaseProvider`, `apiClientProvider`) are resolvable from `ProviderScope` without error
   5. `build_runner` produces a clean output (zero errors) with Drift + Freezed + Riverpod generators coexisting
-**Plans**: TBD
+**Plans**: 3 plans
+Plans:
+- [ ] 01-01-PLAN.md — Packages + ProviderScope bootstrap + maxRetries constant (DI-01)
+- [ ] 01-02-PLAN.md — Strip ListenableServiceMixin from services; add Tier 1+2 bridge providers (DI-02, DI-03, DI-04, DI-05, DI-07)
+- [ ] 01-03-PLAN.md — Repository + Tier 4 stream providers; Consumer smoke test (DI-06)
 **Canonical refs**:
   - `lib/main.dart` — bootstrap order, `setupLocator()` call
   - `lib/app/app.locator.dart` — GetIt registrations being bridged
@@ -137,7 +141,7 @@
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. DI Foundation | 0/? | Not started | - |
+| 1. DI Foundation | 0/3 | Not started | - |
 | 2. ViewModel Migration | 0/? | Not started | - |
 | 3. Routing Migration | 0/? | Not started | - |
 | 4. Package Removal | 0/? | Not started | - |
@@ -146,4 +150,4 @@
 ---
 
 *Roadmap created: 2026-03-26*
-*Last updated: 2026-03-26 after initialization*
+*Last updated: 2026-03-26 — Phase 1 plans created (3 plans, 3 waves)*
