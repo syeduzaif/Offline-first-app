@@ -1,39 +1,34 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:offline_first_app/core/constants/app_colors.dart';
 import 'package:offline_first_app/core/constants/app_paddings.dart';
 import 'package:offline_first_app/core/constants/strings/app_strings.dart';
-import 'package:offline_first_app/domain/models/product.dart';
 import 'package:offline_first_app/ui/views/add_product/widgets/product_form_wdiget.dart';
-import 'package:offline_first_app/ui/views/edit_product/edit_product_viewmodel.dart';
-import 'package:stacked/stacked.dart';
+import 'package:offline_first_app/ui/views/edit_product/edit_product_state.dart';
 
-class EditProductView
-    extends StackedView<EditProductViewModel> {
+class EditProductView extends ConsumerWidget {
   const EditProductView({
     super.key,
-    required this.product,
+    required this.productId,
   });
 
-  final Product product;
+  final int productId;
 
   @override
-  void onViewModelReady(EditProductViewModel viewModel) {
-    viewModel.initialize(product);
-    super.onViewModelReady(viewModel);
-  }
+  Widget build(BuildContext context, WidgetRef ref) {
+    final state = ref.watch(editProductControllerProvider(productId));
+    final controller =
+        ref.read(editProductControllerProvider(productId).notifier);
 
-  @override
-  Widget builder(
-    BuildContext context,
-    EditProductViewModel viewModel,
-    Widget? child,
-  ) {
     return Scaffold(
       appBar: AppBar(
         title: const Text(ProductStrings.editProduct),
         actions: [
           TextButton(
-            onPressed: viewModel.saveProduct,
+            onPressed: state.isLoading
+                ? null
+                : () => _saveProduct(context, controller),
             child: Text(
               CommonStrings.actionSave,
               style: const TextStyle(color: AppColors.white),
@@ -44,22 +39,32 @@ class EditProductView
       body: SingleChildScrollView(
         padding: AppPaddings.allBase,
         child: ProductForm(
-          titleController: viewModel.titleController,
-          descriptionController:
-              viewModel.descriptionController,
-          priceController: viewModel.priceController,
-          brandController: viewModel.brandController,
-          stockController: viewModel.stockController,
-          categories: viewModel.categories,
-          selectedCategory: viewModel.selectedCategory,
-          onCategoryChanged: viewModel.onCategoryChanged,
+          titleController: controller.titleController,
+          descriptionController: controller.descriptionController,
+          priceController: controller.priceController,
+          brandController: controller.brandController,
+          stockController: controller.stockController,
+          categories: state.categories,
+          selectedCategory: state.selectedCategory,
+          onCategoryChanged: controller.onCategoryChanged,
         ),
       ),
     );
   }
 
-  @override
-  EditProductViewModel viewModelBuilder(
-          BuildContext context) =>
-      EditProductViewModel();
+  Future<void> _saveProduct(
+    BuildContext context,
+    EditProductController controller,
+  ) async {
+    final result = await controller.saveProduct();
+    if (!context.mounted) return;
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(result.message)),
+    );
+
+    if (result.didSucceed) {
+      context.pop();
+    }
+  }
 }

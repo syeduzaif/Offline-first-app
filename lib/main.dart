@@ -1,26 +1,22 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
-import 'package:stacked_services/stacked_services.dart';
 import 'package:workmanager/workmanager.dart';
 
-import 'package:offline_first_app/app/app.locator.dart';
-import 'package:offline_first_app/app/app.router.dart';
+import 'package:offline_first_app/app/app_router.dart';
 import 'package:offline_first_app/core/constants/strings/app_strings.dart';
+import 'package:offline_first_app/core/di/providers.dart';
 import 'package:offline_first_app/core/theme/app_theme.dart';
 import 'package:offline_first_app/data/local/database.dart';
 import 'package:offline_first_app/data/remote/api_client.dart';
 import 'package:offline_first_app/data/repositories/categories_repository.dart';
 import 'package:offline_first_app/data/repositories/products_repository.dart';
 import 'package:offline_first_app/services/connectivity_service.dart';
-import 'package:offline_first_app/services/database_service.dart';
 import 'package:offline_first_app/services/sync_service.dart';
 
 @pragma('vm:entry-point')
 void callbackDispatcher() {
   Workmanager().executeTask((task, inputData) async {
-    // This runs in a separate isolate — all instances are independent
-    // of the foreground app. Always close the DB when done to avoid
-    // WAL journal corruption on iOS.
     final db = AppDatabase();
     try {
       final apiClient = ApiClient();
@@ -37,6 +33,8 @@ void callbackDispatcher() {
       syncService.dispose();
       return true;
     } finally {
+      // Always close the isolate-local database in finally.
+      // On iOS, leaving a background isolate DB open can corrupt WAL state.
       await db.close();
     }
   });
@@ -45,45 +43,30 @@ void callbackDispatcher() {
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // 1. Stacked generated locator
-  await setupLocator();
+  // Database
+  final db = AppDatabase();
 
-  // 2. Database
-  final dbService = DatabaseService();
-  await dbService.initialize();
-  locator.registerSingleton<DatabaseService>(dbService);
-  locator
-      .registerSingleton<AppDatabase>(dbService.database);
-
-  // 3. API Client
+  // API Client
   final apiClient = ApiClient();
-  locator.registerSingleton<ApiClient>(apiClient);
 
-  // 4. Repositories
-  final db = dbService.database;
+  // Repositories
   final productsRepo = ProductsRepository(
     productsDao: db.productsDao,
     syncQueueDao: db.syncQueueDao,
     apiClient: apiClient,
     database: db,
   );
-  locator.registerSingleton<ProductsRepository>(
-      productsRepo);
 
   final categoriesRepo = CategoriesRepository(
     categoriesDao: db.categoriesDao,
     apiClient: apiClient,
   );
-  locator.registerSingleton<CategoriesRepository>(
-      categoriesRepo);
 
-  // 5. Connectivity Service
+  // Connectivity Service
   final connectivity = ConnectivityService();
   await connectivity.initialize();
-  locator.registerSingleton<ConnectivityService>(
-      connectivity);
 
-  // 6. Sync Service
+  // Sync Service
   final syncService = SyncService(
     syncQueueDao: db.syncQueueDao,
     productsDao: db.productsDao,
@@ -91,22 +74,17 @@ Future<void> main() async {
     connectivityService: connectivity,
   );
   syncService.initialize();
-  locator.registerSingleton<SyncService>(syncService);
 
-  // 7. Workmanager (background sync)
-  await Workmanager().initialize(
-    callbackDispatcher,
-  );
+  // Workmanager (background sync)
+  await Workmanager().initialize(callbackDispatcher);
   await Workmanager().registerPeriodicTask(
     'offline-first-sync',
     'backgroundSync',
     frequency: const Duration(minutes: 15),
-    constraints: Constraints(
-      networkType: NetworkType.connected,
-    ),
+    constraints: Constraints(networkType: NetworkType.connected),
   );
 
-  // 8. Initial data fetch (silently fails if offline)
+  // Initial data fetch (silently fails if offline)
   try {
     await Future.wait([
       productsRepo.refreshProducts(),
@@ -116,26 +94,38 @@ Future<void> main() async {
     // Offline start — local DB serves cached data
   }
 
-  runApp(const MyApp());
+  runApp(
+    ProviderScope(
+      overrides: [
+        appDatabaseProvider.overrideWithValue(db),
+        apiClientProvider.overrideWithValue(apiClient),
+        productsRepositoryProvider.overrideWithValue(productsRepo),
+        categoriesRepositoryProvider.overrideWithValue(categoriesRepo),
+        connectivityServiceProvider.overrideWithValue(connectivity),
+        syncServiceProvider.overrideWithValue(syncService),
+      ],
+      child: const MyApp(),
+    ),
+  );
 }
 
-class MyApp extends StatelessWidget {
+class MyApp extends ConsumerWidget {
   const MyApp({super.key});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final router = ref.read(goRouterProvider);
+
     return ScreenUtilInit(
       designSize: const Size(440, 956),
       minTextAdapt: true,
       splitScreenMode: true,
       builder: (context, child) {
-        return MaterialApp(
+        return MaterialApp.router(
           title: CommonStrings.appTitle,
           debugShowCheckedModeBanner: false,
           theme: AppTheme.lightTheme,
-          navigatorKey: StackedService.navigatorKey,
-          onGenerateRoute:
-              StackedRouter().onGenerateRoute,
+          routerConfig: router,
         );
       },
     );
