@@ -1,6 +1,7 @@
 # Phase 1: DI Foundation - Context
 
 **Gathered:** 2026-03-26
+**Updated:** 2026-03-26
 **Status:** Ready for planning
 
 <domain>
@@ -19,13 +20,16 @@ Establish the Riverpod provider graph (Tiers 1–5) covering all infrastructure,
 
 ### Bridge Provider Strategy (Pre-decided — locked)
 - **D-03:** Bridge providers wrap existing GetIt singletons to prevent dual-instance bugs: `@riverpod SyncService syncService(SyncServiceRef ref) => locator<SyncService>()`. Bridges are removed in Phase 4 when GetIt is gone.
-- **D-04:** `SyncConfig.maxRetries` constant extracted as the very first commit of Phase 1 (before touching any service), resolving the retry threshold inconsistency across `sync_service.dart` and one other file.
+- **D-04:** `SyncConfig.maxRetries` constant extracted as the very first commit of Phase 1 (before touching any service). Implemented as `const _maxRetries = 3;` at the top of `sync_service.dart` — private, co-located. This resolves the retry threshold inconsistency. FEAT-06 in v2 backlog is satisfied by this Phase 1 commit; no separate v2 work needed.
 
 ### isSyncing Signal (Claude's Discretion)
 - **D-05:** `SyncService.isSyncing` exposed via `StreamController<bool>.broadcast()` — consistent with `ConnectivityService.onConnectivityChanged` which already uses this pattern. `_isSyncing` `ReactiveValue<bool>` replaced with `StreamController<bool>` + `bool get isSyncing`. `syncingProvider` is a `StreamProvider<bool>` backed by this stream.
 
 ### Provider File Organization (Claude's Discretion)
 - **D-06:** Providers co-located in their owner files (`appDatabaseProvider` at the bottom of `database.dart`, `connectivityServiceProvider` in `connectivity_service.dart`, etc.). Keeps provider and the class it wraps in the same file — easier to navigate during migration.
+
+### DatabaseService Provider (DI-07)
+- **D-07:** `DatabaseService` is collapsed into `appDatabaseProvider` — no separate `databaseServiceProvider` bridge. DI-07's intent ("keepAlive database provider") is fully satisfied by `appDatabaseProvider` alone. In Phase 1: `appDatabaseProvider` bridges `locator<AppDatabase>()` (the already-initialized instance). In Phase 4: bridge is replaced with direct `AppDatabase()` creation and `DatabaseService` is deleted. `DatabaseService` stays in the locator as-is until Phase 4.
 
 </decisions>
 
@@ -41,6 +45,7 @@ Establish the Riverpod provider graph (Tiers 1–5) covering all infrastructure,
 ### Services (ListenableServiceMixin removal targets)
 - `lib/services/connectivity_service.dart` — `ListenableServiceMixin` + `ReactiveValue<bool>` removal; `onConnectivityChanged` stream already exists (StreamController pattern already in place)
 - `lib/services/sync_service.dart` — `ListenableServiceMixin` + `ReactiveValue<bool>` removal; `isSyncing` signal must be replaced before any ViewModel migration
+- `lib/services/database_service.dart` — thin init wrapper; bridged via `appDatabaseProvider` in Phase 1, deleted in Phase 4
 
 ### Infrastructure Providers
 - `lib/data/local/database.dart` — `AppDatabase`; `appDatabaseProvider` lives here
@@ -98,3 +103,4 @@ None — discussion stayed within Phase 1 scope.
 
 *Phase: 01-di-foundation*
 *Context gathered: 2026-03-26*
+*Context updated: 2026-03-26*
