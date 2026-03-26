@@ -1,34 +1,40 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:iconsax/iconsax.dart';
 import 'package:offline_first_app/core/constants/app_colors.dart';
 import 'package:offline_first_app/core/constants/app_layout.dart';
 import 'package:offline_first_app/core/constants/app_paddings.dart';
 import 'package:offline_first_app/core/constants/app_text_styles.dart';
 import 'package:offline_first_app/core/constants/strings/app_strings.dart';
-import 'package:offline_first_app/ui/views/products/products_viewmodel.dart';
+import 'package:offline_first_app/ui/views/products/products_state.dart';
 import 'package:offline_first_app/ui/views/products/widgets/category_filter_chips_wdiget.dart';
 import 'package:offline_first_app/ui/views/products/widgets/connectivity_banner_wdiget.dart';
 import 'package:offline_first_app/ui/views/products/widgets/product_card_wdiget.dart';
 import 'package:offline_first_app/ui/views/products/widgets/product_search_bar_wdiget.dart';
 import 'package:offline_first_app/ui/widgets/empty_state_wdiget.dart';
 import 'package:offline_first_app/ui/widgets/loading_indicator_wdiget.dart';
-import 'package:stacked/stacked.dart';
 
-class ProductsView extends StackedView<ProductsViewModel> {
+class ProductsView extends ConsumerStatefulWidget {
   const ProductsView({super.key});
 
   @override
-  void onViewModelReady(ProductsViewModel viewModel) {
-    viewModel.initialize();
-    super.onViewModelReady(viewModel);
+  ConsumerState<ProductsView> createState() =>
+      _ProductsViewState();
+}
+
+class _ProductsViewState extends ConsumerState<ProductsView> {
+  @override
+  void initState() {
+    super.initState();
+    ref.read(productsControllerProvider);
   }
 
   @override
-  Widget builder(
-    BuildContext context,
-    ProductsViewModel viewModel,
-    Widget? child,
-  ) {
+  Widget build(BuildContext context) {
+    final state = ref.watch(productsControllerProvider);
+    final controller =
+        ref.read(productsControllerProvider.notifier);
+
     return Scaffold(
       backgroundColor: AppColors.primaryLighter,
       body: SafeArea(
@@ -36,8 +42,7 @@ class ProductsView extends StackedView<ProductsViewModel> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             // Connectivity banner
-            ConnectivityBanner(
-                isOnline: viewModel.isOnline),
+            ConnectivityBanner(isOnline: state.isOnline),
             // Header
             Padding(
               padding: EdgeInsets.only(
@@ -54,12 +59,11 @@ class ProductsView extends StackedView<ProductsViewModel> {
                       style: AppTextStyles.h3.bold,
                     ),
                   ),
-                  if (viewModel.isSyncing)
+                  if (state.isSyncing)
                     SizedBox(
                       width: AppLayout.iconSizeMdSm,
                       height: AppLayout.iconSizeMdSm,
-                      child:
-                          const CircularProgressIndicator(
+                      child: const CircularProgressIndicator(
                         strokeWidth: 2,
                         color: AppColors.primary,
                       ),
@@ -68,69 +72,57 @@ class ProductsView extends StackedView<ProductsViewModel> {
               ),
             ),
             // Search bar
-            ProductSearchBar(
-                onChanged: viewModel.onSearchChanged),
+            ProductSearchBar(onChanged: controller.onSearchChanged),
             SizedBox(height: AppLayout.height12),
             // Category chips
             CategoryFilterChips(
-              categories: viewModel.categories,
-              selectedSlug: viewModel.selectedCategory,
-              onSelected: viewModel.selectCategory,
+              categories: state.categories,
+              selectedSlug: state.selectedCategory,
+              onSelected: controller.selectCategory,
             ),
             SizedBox(height: AppLayout.height12),
             // Product list
             Expanded(
               child: RefreshIndicator(
-                onRefresh: viewModel.onRefresh,
+                onRefresh: controller.onRefresh,
                 color: AppColors.primary,
-                child: viewModel.products.isEmpty &&
-                        !viewModel.isBusy
+                child: state.products.isEmpty &&
+                        !state.isInitialLoading
                     ? ListView(
                         children: [
-                          SizedBox(
-                              height:
-                                  AppLayout.height140),
+                          SizedBox(height: AppLayout.height140),
                           EmptyState(
-                            message:
-                                ProductStrings.noProducts,
+                            message: ProductStrings.noProducts,
                             icon: Iconsax.box_1,
                           ),
                         ],
                       )
-                    : viewModel.products.isEmpty
+                    : state.products.isEmpty
                         ? const LoadingIndicator()
                         : ListView.builder(
-                            controller: viewModel
-                                .scrollController,
+                            controller: controller.scrollController,
                             padding: AppPaddings.only(
                               left: AppPaddings.base,
                               right: AppPaddings.base,
-                              bottom: AppLayout
-                                      .bottomNavBarHeight +
-                                  AppPaddings.base +
-                                  AppPaddings.large,
+                              bottom:
+                                  AppLayout.bottomNavBarHeight +
+                                      AppPaddings.base +
+                                      AppPaddings.large,
                             ),
-                            itemCount: viewModel
-                                    .products.length +
-                                (viewModel.hasMore
-                                    ? 1
-                                    : 0),
-                            itemBuilder:
-                                (context, index) {
-                              if (index >=
-                                  viewModel
-                                      .products.length) {
+                            itemCount: state.products.length +
+                                (state.hasMore ? 1 : 0),
+                            itemBuilder: (context, index) {
+                              if (index >= state.products.length) {
                                 return const LoadingIndicator();
                               }
-                              final product = viewModel
-                                  .products[index];
+                              final product = state.products[index];
                               return ProductCard(
-                                key: ValueKey(
-                                    product.id),
+                                key: ValueKey(product.id),
                                 product: product,
-                                onTap: () => viewModel
-                                    .navigateToDetail(
-                                        product.id),
+                                onTap: () => controller.navigateToDetail(
+                                  context,
+                                  product.id,
+                                ),
                               );
                             },
                           ),
@@ -144,7 +136,7 @@ class ProductsView extends StackedView<ProductsViewModel> {
           bottom: AppLayout.bottomNavBarHeight,
         ),
         child: FloatingActionButton(
-          onPressed: viewModel.navigateToAddProduct,
+          onPressed: () => controller.navigateToAddProduct(context),
           backgroundColor: AppColors.primary,
           child: Icon(
             Iconsax.add,
@@ -155,8 +147,4 @@ class ProductsView extends StackedView<ProductsViewModel> {
       ),
     );
   }
-
-  @override
-  ProductsViewModel viewModelBuilder(BuildContext context) =>
-      ProductsViewModel();
 }

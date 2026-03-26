@@ -1,15 +1,16 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:iconsax/iconsax.dart';
 import 'package:offline_first_app/core/constants/app_colors.dart';
 import 'package:offline_first_app/core/constants/app_layout.dart';
-import 'package:offline_first_app/ui/views/product_detail/product_detail_viewmodel.dart';
+import 'package:offline_first_app/core/constants/strings/app_strings.dart';
+import 'package:offline_first_app/ui/views/product_detail/product_detail_state.dart';
 import 'package:offline_first_app/ui/views/product_detail/widgets/product_image_gallery_wdiget.dart';
 import 'package:offline_first_app/ui/views/product_detail/widgets/product_info_section_wdiget.dart';
 import 'package:offline_first_app/ui/widgets/loading_indicator_wdiget.dart';
-import 'package:stacked/stacked.dart';
 
-class ProductDetailView
-    extends StackedView<ProductDetailViewModel> {
+class ProductDetailView extends ConsumerStatefulWidget {
   const ProductDetailView({
     super.key,
     required this.productId,
@@ -18,18 +19,25 @@ class ProductDetailView
   final int productId;
 
   @override
-  void onViewModelReady(ProductDetailViewModel viewModel) {
-    viewModel.initialize(productId);
-    super.onViewModelReady(viewModel);
+  ConsumerState<ProductDetailView> createState() =>
+      _ProductDetailViewState();
+}
+
+class _ProductDetailViewState extends ConsumerState<ProductDetailView> {
+  @override
+  void initState() {
+    super.initState();
+    ref
+        .read(productDetailControllerProvider.notifier)
+        .initialize(widget.productId);
   }
 
   @override
-  Widget builder(
-    BuildContext context,
-    ProductDetailViewModel viewModel,
-    Widget? child,
-  ) {
-    final product = viewModel.product;
+  Widget build(BuildContext context) {
+    final state = ref.watch(productDetailControllerProvider);
+    final controller =
+        ref.read(productDetailControllerProvider.notifier);
+    final product = state.product;
     if (product == null) {
       return const Scaffold(
         body: LoadingIndicator(),
@@ -45,7 +53,8 @@ class ProductDetailView
               Iconsax.edit,
               size: AppLayout.iconSizeMd,
             ),
-            onPressed: viewModel.navigateToEdit,
+            onPressed: () =>
+                context.push('/product/${product.id}/edit'),
           ),
           IconButton(
             icon: Icon(
@@ -53,7 +62,7 @@ class ProductDetailView
               size: AppLayout.iconSizeMd,
               color: AppColors.failedText,
             ),
-            onPressed: viewModel.deleteProduct,
+            onPressed: () => _confirmDelete(context, controller),
           ),
         ],
       ),
@@ -77,8 +86,34 @@ class ProductDetailView
     );
   }
 
-  @override
-  ProductDetailViewModel viewModelBuilder(
-          BuildContext context) =>
-      ProductDetailViewModel();
+  Future<void> _confirmDelete(
+    BuildContext context,
+    ProductDetailController controller,
+  ) async {
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text(ProductStrings.deleteProduct),
+        content: const Text(ProductStrings.confirmDelete),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text(CommonStrings.actionCancel),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text(CommonStrings.actionDelete),
+          ),
+        ],
+      ),
+    );
+    if (result != true) return;
+
+    await controller.deleteProduct();
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text(ProductStrings.deleteSuccess)),
+    );
+    context.pop();
+  }
 }

@@ -10,18 +10,18 @@
 ## 1. Architecture
 
 ### Pattern
-MVVM with reactive data binding via the Stacked framework.
+Feature-first MVVM with Riverpod providers and ChangeNotifier-based controllers (migration-safe).
 
 ```
 UI Layer        → Views + Widgets (Flutter)
-ViewModel Layer → Stacked ViewModels (state + logic)
-Service Layer   → SyncService, ConnectivityService
+ViewModel Layer → Riverpod ChangeNotifier controllers (state + logic)
+Service Layer   → SyncService, ConnectivityService (ChangeNotifier)
 Repository Layer→ ProductsRepository, CategoriesRepository
 Data Layer      → Local (Drift/SQLite) + Remote (Dio/DummyJSON)
 ```
 
 ### Dependency Injection
-`stacked_services` locator pattern (`get_it` under the hood). All singletons registered at app startup in `main.dart` and `app.locator.dart`.
+Riverpod providers with app-level overrides in `main.dart`.
 
 ---
 
@@ -30,8 +30,8 @@ Data Layer      → Local (Drift/SQLite) + Remote (Dio/DummyJSON)
 | Concern | Library | Version |
 |---|---|---|
 | UI Framework | Flutter | 3.x |
-| State Management | stacked | ^3.5.0 |
-| DI / Services | stacked_services | ^1.6.0 |
+| State Management | flutter_riverpod, riverpod | ^3.3.1 / ^3.2.1 |
+| Navigation | go_router | ^17.1.0 |
 | Local Database | drift (SQLite) | ^2.24.0 |
 | SQLite Native | sqlite3_flutter_libs | ^0.5.32 |
 | HTTP Client | dio | ^5.4.0 |
@@ -52,13 +52,11 @@ Data Layer      → Local (Drift/SQLite) + Remote (Dio/DummyJSON)
 ```
 lib/
 ├── app/
-│   ├── app.dart                  # Stacked app definition (routes + DI)
-│   ├── app.locator.dart          # Generated locator
-│   └── app.router.dart           # Generated router
+│   └── app_router.dart           # go_router config
 ├── core/
 │   ├── constants/                # Colors, paddings, text styles, strings
-│   ├── theme/                    # AppTheme
-│   └── viewmodels/               # AppViewModel base class
+│   ├── di/                       # Riverpod providers
+│   └── theme/                    # AppTheme
 ├── data/
 │   ├── local/
 │   │   ├── database.dart         # AppDatabase (Drift)
@@ -77,7 +75,6 @@ lib/
 │   └── models/sync_status.dart
 ├── services/
 │   ├── connectivity_service.dart
-│   ├── database_service.dart
 │   └── sync_service.dart
 ├── ui/
 │   ├── views/
@@ -88,7 +85,7 @@ lib/
 │   │   ├── edit_product/         # EditProductView + ViewModel
 │   │   └── sync_queue/           # SyncQueueView + ViewModel + widgets
 │   └── widgets/                  # Shared: EmptyState, LoadingIndicator, etc.
-└── main.dart                     # Bootstrap, DI registration, WorkManager init
+└── main.dart                     # Bootstrap, provider overrides, WorkManager init
 ```
 
 ---
@@ -168,7 +165,7 @@ Base URL: `https://dummyjson.com`
 
 ### SyncService
 
-Singleton registered in the locator. Implements `ListenableServiceMixin` for reactive UI updates.
+Singleton provided via Riverpod. Extends `ChangeNotifier` for reactive UI updates.
 
 **Initialization (`initialize()`):**
 - Subscribes to `ConnectivityService.onConnectivityChanged`.
@@ -223,26 +220,21 @@ Singleton registered in the locator. Implements `ListenableServiceMixin` for rea
 
 ## 9. Navigation
 
-Uses Stacked's generated router with `MaterialRoute` transitions.
+Uses `go_router` with path-based routes.
 
 ```
 / (MainView)
-/product-detail
-/add-product
-/edit-product
-/sync-queue
+/product/add
+/product/:id
+/product/:id/edit
 ```
-
-Navigator key: `StackedService.navigatorKey` set on `MaterialApp`.
 
 ---
 
 ## 10. State Management
 
-- `StackedView<VM>` — binds a view to a ViewModel, manages lifecycle.
-- `BaseViewModel` (via `AppViewModel`) — `setBusy`, `setError`, `notifyListeners`.
-- `ReactiveViewModel` — listens to `ListenableServiceMixin` services (used by SyncQueueViewModel to react to SyncService state).
-- `ReactiveValue<T>` — used in SyncService for `isSyncing`.
+- Riverpod `ChangeNotifierProvider` wraps feature controllers.
+- Views are `ConsumerWidget`/`ConsumerStatefulWidget` with `ref.watch`.
 - Local DB streams (Drift) drive product list, category list, sync queue list reactively.
 
 ---
@@ -258,7 +250,6 @@ dart run build_runner build --delete-conflicting-outputs
 Generates:
 - `*.freezed.dart` — immutable models + copyWith
 - `*.g.dart` — JSON serialization, Drift DAOs, Drift database
-- `app.locator.dart`, `app.router.dart` — Stacked DI and routing
 
 ---
 
@@ -268,7 +259,7 @@ Generates:
 - All spacing uses `AppPaddings`, `AppLayout`, `AppTextStyles`, `AppColors` constants.
 - Bottom nav is a floating pill rendered in a `Stack` inside `MainView` — child views account for nav height via bottom list padding (`AppLayout.bottomNavBarHeight`).
 - FAB on Products screen offset upward by `AppLayout.bottomNavBarHeight` to clear the floating nav.
-- Snackbar: Flutter's native `ScaffoldMessenger.showSnackBar` via `StackedService.navigatorKey.currentContext`.
+- Snackbar: Flutter's native `ScaffoldMessenger.showSnackBar`.
 
 ---
 
@@ -276,13 +267,12 @@ Generates:
 
 ```
 1. WidgetsFlutterBinding.ensureInitialized()
-2. setupLocator()              — registers NavigationService, DialogService, SnackbarService
-3. DatabaseService.initialize() — opens SQLite via Drift
-4. Register AppDatabase, ApiClient singletons
-5. Construct ProductsRepository, CategoriesRepository
-6. ConnectivityService.initialize() — check + subscribe
-7. SyncService.initialize()    — subscribe to connectivity stream
-8. Workmanager().initialize() + registerPeriodicTask
-9. Initial data fetch (refreshProducts + refreshCategories) — silent fail if offline
-10. runApp(MyApp)
+2. Create AppDatabase
+3. Create ApiClient
+4. Construct ProductsRepository, CategoriesRepository
+5. ConnectivityService.initialize() — check + subscribe
+6. SyncService.initialize()    — subscribe to connectivity stream
+7. Workmanager().initialize() + registerPeriodicTask
+8. Initial data fetch (refreshProducts + refreshCategories) — silent fail if offline
+9. runApp(ProviderScope overrides + MyApp)
 ```

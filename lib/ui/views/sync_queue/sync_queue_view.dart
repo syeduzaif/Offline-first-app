@@ -1,31 +1,36 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:iconsax/iconsax.dart';
 import 'package:offline_first_app/core/constants/app_colors.dart';
 import 'package:offline_first_app/core/constants/app_layout.dart';
 import 'package:offline_first_app/core/constants/app_paddings.dart';
 import 'package:offline_first_app/core/constants/app_text_styles.dart';
 import 'package:offline_first_app/core/constants/strings/app_strings.dart';
-import 'package:offline_first_app/ui/views/sync_queue/sync_queue_viewmodel.dart';
+import 'package:offline_first_app/ui/views/sync_queue/sync_queue_state.dart';
 import 'package:offline_first_app/ui/views/sync_queue/widgets/sync_operation_card_wdiget.dart';
 import 'package:offline_first_app/ui/widgets/empty_state_wdiget.dart';
-import 'package:stacked/stacked.dart';
 
-class SyncQueueView
-    extends StackedView<SyncQueueViewModel> {
+class SyncQueueView extends ConsumerStatefulWidget {
   const SyncQueueView({super.key});
 
   @override
-  void onViewModelReady(SyncQueueViewModel viewModel) {
-    viewModel.initialize();
-    super.onViewModelReady(viewModel);
+  ConsumerState<SyncQueueView> createState() =>
+      _SyncQueueViewState();
+}
+
+class _SyncQueueViewState extends ConsumerState<SyncQueueView> {
+  @override
+  void initState() {
+    super.initState();
+    ref.read(syncQueueControllerProvider);
   }
 
   @override
-  Widget builder(
-    BuildContext context,
-    SyncQueueViewModel viewModel,
-    Widget? child,
-  ) {
+  Widget build(BuildContext context) {
+    final state = ref.watch(syncQueueControllerProvider);
+    final controller =
+        ref.read(syncQueueControllerProvider.notifier);
+
     return Scaffold(
       backgroundColor: AppColors.primaryLighter,
       body: SafeArea(
@@ -48,12 +53,11 @@ class SyncQueueView
                       style: AppTextStyles.h3.bold,
                     ),
                   ),
-                  if (viewModel.isSyncing)
+                  if (state.isSyncing)
                     SizedBox(
                       width: AppLayout.iconSizeMdSm,
                       height: AppLayout.iconSizeMdSm,
-                      child:
-                          const CircularProgressIndicator(
+                      child: const CircularProgressIndicator(
                         strokeWidth: 2,
                         color: AppColors.primary,
                       ),
@@ -69,13 +73,13 @@ class SyncQueueView
                   _ActionButton(
                     label: SyncStrings.syncNow,
                     icon: Iconsax.refresh,
-                    onTap: viewModel.syncNow,
+                    onTap: controller.syncNow,
                   ),
                   SizedBox(width: AppLayout.width12),
                   _ActionButton(
                     label: SyncStrings.clearCompleted,
                     icon: Iconsax.trash,
-                    onTap: viewModel.clearCompleted,
+                    onTap: controller.clearCompleted,
                   ),
                 ],
               ),
@@ -83,31 +87,27 @@ class SyncQueueView
             SizedBox(height: AppLayout.height12),
             // Operations list
             Expanded(
-              child: viewModel.operations.isEmpty
+              child: state.operations.isEmpty
                   ? EmptyState(
-                      message:
-                          SyncStrings.noOperations,
+                      message: SyncStrings.noOperations,
                       icon: Iconsax.tick_circle,
                     )
                   : ListView.builder(
                       padding: AppPaddings.only(
                         left: AppPaddings.base,
                         right: AppPaddings.base,
-                        bottom: AppLayout
-                                .bottomNavBarHeight +
+                        bottom: AppLayout.bottomNavBarHeight +
                             AppPaddings.base +
                             AppPaddings.large,
                       ),
-                      itemCount:
-                          viewModel.operations.length,
+                      itemCount: state.operations.length,
                       itemBuilder: (context, index) {
-                        final op =
-                            viewModel.operations[index];
+                        final op = state.operations[index];
                         return SyncOperationCard(
                           key: ValueKey(op.id),
                           operation: op,
-                          onRetry: () => viewModel
-                              .retryOperation(op.id),
+                          onRetry: () =>
+                              controller.retryOperation(op.id),
                         );
                       },
                     ),
@@ -117,11 +117,6 @@ class SyncQueueView
       ),
     );
   }
-
-  @override
-  SyncQueueViewModel viewModelBuilder(
-          BuildContext context) =>
-      SyncQueueViewModel();
 }
 
 class _ActionButton extends StatelessWidget {
@@ -146,8 +141,7 @@ class _ActionButton extends StatelessWidget {
         ),
         decoration: BoxDecoration(
           color: AppColors.white,
-          borderRadius:
-              BorderRadius.circular(AppLayout.radiusMd),
+          borderRadius: BorderRadius.circular(AppLayout.radiusMd),
           boxShadow: AppLayout.shadowSm,
         ),
         child: Row(
