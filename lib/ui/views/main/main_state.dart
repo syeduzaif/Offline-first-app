@@ -1,9 +1,11 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:offline_first_app/core/di/providers.dart';
 import 'package:offline_first_app/data/local/database.dart';
 
+@immutable
 class MainState {
   const MainState({
     this.currentIndex = 0,

@@ -10,23 +10,11 @@ import 'package:offline_first_app/ui/views/sync_queue/sync_queue_state.dart';
 import 'package:offline_first_app/ui/views/sync_queue/widgets/sync_operation_card_wdiget.dart';
 import 'package:offline_first_app/ui/widgets/empty_state_wdiget.dart';
 
-class SyncQueueView extends ConsumerStatefulWidget {
+class SyncQueueView extends ConsumerWidget {
   const SyncQueueView({super.key});
 
   @override
-  ConsumerState<SyncQueueView> createState() =>
-      _SyncQueueViewState();
-}
-
-class _SyncQueueViewState extends ConsumerState<SyncQueueView> {
-  @override
-  void initState() {
-    super.initState();
-    ref.read(syncQueueControllerProvider);
-  }
-
-  @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final state = ref.watch(syncQueueControllerProvider);
     final controller =
         ref.read(syncQueueControllerProvider.notifier);

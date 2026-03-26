@@ -34,6 +34,8 @@ class ProductStrings {
       'Please select a category';
   static const String errorSaveFailed =
       'Failed to save. Please try again';
+  static const String errorDeleteFailed =
+      'Failed to delete. Please try again';
 
   static String priceLabel(double price) =>
       '\$${price.toStringAsFixed(2)}';

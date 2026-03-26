@@ -1,12 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:offline_first_app/core/constants/app_colors.dart';
 import 'package:offline_first_app/core/constants/app_paddings.dart';
 import 'package:offline_first_app/core/constants/strings/app_strings.dart';
 import 'package:offline_first_app/ui/views/add_product/widgets/product_form_wdiget.dart';
 import 'package:offline_first_app/ui/views/edit_product/edit_product_state.dart';
 
-class EditProductView extends ConsumerStatefulWidget {
+class EditProductView extends ConsumerWidget {
   const EditProductView({
     super.key,
     required this.productId,
@@ -15,31 +16,19 @@ class EditProductView extends ConsumerStatefulWidget {
   final int productId;
 
   @override
-  ConsumerState<EditProductView> createState() =>
-      _EditProductViewState();
-}
-
-class _EditProductViewState extends ConsumerState<EditProductView> {
-  @override
-  void initState() {
-    super.initState();
-    ref
-        .read(editProductControllerProvider.notifier)
-        .initialize(widget.productId);
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final state = ref.watch(editProductControllerProvider);
+  Widget build(BuildContext context, WidgetRef ref) {
+    final state = ref.watch(editProductControllerProvider(productId));
     final controller =
-        ref.read(editProductControllerProvider.notifier);
+        ref.read(editProductControllerProvider(productId).notifier);
 
     return Scaffold(
       appBar: AppBar(
         title: const Text(ProductStrings.editProduct),
         actions: [
           TextButton(
-            onPressed: () => controller.saveProduct(context),
+            onPressed: state.isLoading
+                ? null
+                : () => _saveProduct(context, controller),
             child: Text(
               CommonStrings.actionSave,
               style: const TextStyle(color: AppColors.white),
@@ -61,5 +50,21 @@ class _EditProductViewState extends ConsumerState<EditProductView> {
         ),
       ),
     );
+  }
+
+  Future<void> _saveProduct(
+    BuildContext context,
+    EditProductController controller,
+  ) async {
+    final result = await controller.saveProduct();
+    if (!context.mounted) return;
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(result.message)),
+    );
+
+    if (result.didSucceed) {
+      context.pop();
+    }
   }
 }

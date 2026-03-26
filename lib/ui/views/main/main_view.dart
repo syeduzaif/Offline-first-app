@@ -5,22 +5,11 @@ import 'package:offline_first_app/ui/views/main/widgets/bottom_navbar_wdiget.dar
 import 'package:offline_first_app/ui/views/products/products_view.dart';
 import 'package:offline_first_app/ui/views/sync_queue/sync_queue_view.dart';
 
-class MainView extends ConsumerStatefulWidget {
+class MainView extends ConsumerWidget {
   const MainView({super.key});
 
   @override
-  ConsumerState<MainView> createState() => _MainViewState();
-}
-
-class _MainViewState extends ConsumerState<MainView> {
-  @override
-  void initState() {
-    super.initState();
-    ref.read(mainControllerProvider);
-  }
-
-  @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final state = ref.watch(mainControllerProvider);
     final controller =
         ref.read(mainControllerProvider.notifier);

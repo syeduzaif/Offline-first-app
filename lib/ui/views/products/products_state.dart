@@ -1,8 +1,7 @@
 import 'dart:async';
 
-import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 import 'package:offline_first_app/core/di/providers.dart';
 import 'package:offline_first_app/data/repositories/categories_repository.dart';
 import 'package:offline_first_app/data/repositories/products_repository.dart';
@@ -11,6 +10,8 @@ import 'package:offline_first_app/domain/models/product.dart';
 
 @immutable
 class ProductsState {
+  static const Object _unset = Object();
+
   const ProductsState({
     this.products = const [],
     this.categories = const [],
@@ -42,7 +43,7 @@ class ProductsState {
   ProductsState copyWith({
     List<Product>? products,
     List<ProductCategory>? categories,
-    String? selectedCategory,
+    Object? selectedCategory = _unset,
     String? searchQuery,
     bool? isOnline,
     bool? isSyncing,
@@ -56,7 +57,9 @@ class ProductsState {
     return ProductsState(
       products: products ?? this.products,
       categories: categories ?? this.categories,
-      selectedCategory: selectedCategory ?? this.selectedCategory,
+      selectedCategory: identical(selectedCategory, _unset)
+          ? this.selectedCategory
+          : selectedCategory as String?,
       searchQuery: searchQuery ?? this.searchQuery,
       isOnline: isOnline ?? this.isOnline,
       isSyncing: isSyncing ?? this.isSyncing,
@@ -79,11 +82,13 @@ class ProductsController extends Notifier<ProductsState> {
   late final ProductsRepository _productsRepo;
   late final CategoriesRepository _categoriesRepo;
 
-  final ScrollController scrollController = ScrollController();
-
   StreamSubscription<List<Product>>? _productsSub;
   StreamSubscription<List<ProductCategory>>? _categoriesSub;
   Timer? _searchDebounce;
+
+  // Synchronous guard — prevents concurrent calls even before the first await,
+  // which state.isLoadingMore alone cannot cover during a fling scroll.
+  bool _isLoadingMore = false;
 
   static const int _pageSize = 20;
 
@@ -94,7 +99,6 @@ class ProductsController extends Notifier<ProductsState> {
     final connectivity = ref.read(connectivityServiceProvider);
     final syncService = ref.read(syncServiceProvider);
 
-    // Initialize state before any reads.
     state = ProductsState(
       isOnline: connectivity.isOnline,
       isSyncing: syncService.isSyncing,
@@ -112,15 +116,12 @@ class ProductsController extends Notifier<ProductsState> {
       _searchDebounce?.cancel();
       _productsSub?.cancel();
       _categoriesSub?.cancel();
-      scrollController.dispose();
     });
 
     _subscribeToProducts();
-    _categoriesSub =
-        _categoriesRepo.watchCategories().listen((cats) {
+    _categoriesSub = _categoriesRepo.watchCategories().listen((cats) {
       state = state.copyWith(categories: cats);
     });
-    scrollController.addListener(_onScroll);
     _initialFetch();
 
     return state;
@@ -165,10 +166,7 @@ class ProductsController extends Notifier<ProductsState> {
   }
 
   void _onProductsChanged(List<Product> products) {
-    state = state.copyWith(
-      products: products,
-      isInitialLoading: false,
-    );
+    state = state.copyWith(products: products, isInitialLoading: false);
   }
 
   void onSearchChanged(String query) {
@@ -199,22 +197,20 @@ class ProductsController extends Notifier<ProductsState> {
       );
       await _categoriesRepo.refreshCategories();
     } catch (_) {
-      // Silently fail
+      // Offline — local DB serves cached data
     }
     state = state.copyWith(isRefreshing: false);
   }
 
-  void _onScroll() {
-    if (scrollController.position.pixels >=
-            scrollController.position.maxScrollExtent -
-                200 &&
-        !state.isLoadingMore &&
-        state.hasMore) {
+  /// Called by the view's scroll listener when near the bottom of the list.
+  void tryLoadMore() {
+    if (!_isLoadingMore && state.hasMore) {
       _loadMore();
     }
   }
 
   Future<void> _loadMore() async {
+    _isLoadingMore = true;
     state = state.copyWith(isLoadingMore: true);
     try {
       final total = await _productsRepo.refreshProducts(
@@ -227,15 +223,14 @@ class ProductsController extends Notifier<ProductsState> {
         currentSkip: newSkip,
         hasMore: newSkip < total,
       );
-    } catch (_) {}
-    state = state.copyWith(isLoadingMore: false);
-  }
-
-  void navigateToDetail(BuildContext context, int id) {
-    context.push('/product/$id');
-  }
-
-  void navigateToAddProduct(BuildContext context) {
-    context.push('/product/add');
+    } catch (e) {
+      debugPrint('ProductsController._loadMore: $e');
+      // Stop paginating on failure so the scroll listener does not hammer
+      // the server/DB in a loop. Pull-to-refresh will re-enable pagination.
+      state = state.copyWith(hasMore: false);
+    } finally {
+      _isLoadingMore = false;
+      state = state.copyWith(isLoadingMore: false);
+    }
   }
 }

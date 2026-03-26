@@ -1,11 +1,13 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:offline_first_app/core/di/providers.dart';
 import 'package:offline_first_app/data/local/database.dart';
 import 'package:offline_first_app/domain/models/sync_operation.dart';
 import 'package:offline_first_app/services/sync_service.dart';
 
+@immutable
 class SyncQueueState {
   const SyncQueueState({
     this.operations = const [],

@@ -2,7 +2,6 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 import 'package:offline_first_app/core/constants/strings/app_strings.dart';
 import 'package:offline_first_app/core/di/providers.dart';
 import 'package:offline_first_app/data/repositories/categories_repository.dart';
@@ -10,9 +9,13 @@ import 'package:offline_first_app/data/repositories/products_repository.dart';
 import 'package:offline_first_app/domain/models/category.dart';
 import 'package:offline_first_app/domain/models/product.dart';
 import 'package:offline_first_app/services/sync_service.dart';
+import 'package:offline_first_app/ui/views/product_form/product_form_submission_result.dart';
+import 'package:offline_first_app/ui/views/product_form/product_form_validator.dart';
 
 @immutable
 class EditProductState {
+  static const Object _unset = Object();
+
   const EditProductState({
     this.product,
     this.categories = const [],
@@ -26,31 +29,40 @@ class EditProductState {
   final bool isLoading;
 
   EditProductState copyWith({
-    Product? product,
+    Object? product = _unset,
     List<ProductCategory>? categories,
-    String? selectedCategory,
+    Object? selectedCategory = _unset,
     bool? isLoading,
   }) {
     return EditProductState(
-      product: product ?? this.product,
+      product: identical(product, _unset)
+          ? this.product
+          : product as Product?,
       categories: categories ?? this.categories,
-      selectedCategory: selectedCategory ?? this.selectedCategory,
+      selectedCategory: identical(selectedCategory, _unset)
+          ? this.selectedCategory
+          : selectedCategory as String?,
       isLoading: isLoading ?? this.isLoading,
     );
   }
 }
 
-final editProductControllerProvider =
-    NotifierProvider<EditProductController, EditProductState>(
-  EditProductController.new,
+// Family key is the productId — one isolated provider instance per product.
+final editProductControllerProvider = NotifierProvider.family<
+    EditProductController, EditProductState, int>(
+  (productId) => EditProductController(productId),
 );
 
 class EditProductController extends Notifier<EditProductState> {
+  EditProductController(this._productId);
+
+  final int _productId;
+
   late final ProductsRepository _productsRepo;
   late final CategoriesRepository _categoriesRepo;
   late final SyncService _syncService;
 
-  int? _productId;
+  // Prevents re-populating text fields on every product stream event.
   bool _didInitFields = false;
 
   final titleController = TextEditingController();
@@ -68,10 +80,12 @@ class EditProductController extends Notifier<EditProductState> {
     _categoriesRepo = ref.read(categoriesRepositoryProvider);
     _syncService = ref.read(syncServiceProvider);
 
-    _catSub =
-        _categoriesRepo.watchCategories().listen((cats) {
+    _catSub = _categoriesRepo.watchCategories().listen((cats) {
       state = state.copyWith(categories: cats);
     });
+
+    _productSub =
+        _productsRepo.watchProduct(_productId).listen(_onProductChanged);
 
     ref.onDispose(() {
       _catSub?.cancel();
@@ -84,17 +98,6 @@ class EditProductController extends Notifier<EditProductState> {
     });
 
     return const EditProductState();
-  }
-
-  void initialize(int productId) {
-    if (_productId == productId && _productSub != null) {
-      return;
-    }
-    _productId = productId;
-    _didInitFields = false;
-    _productSub?.cancel();
-    _productSub =
-        _productsRepo.watchProduct(productId).listen(_onProductChanged);
   }
 
   void _onProductChanged(Product? product) {
@@ -120,36 +123,24 @@ class EditProductController extends Notifier<EditProductState> {
   }
 
   String? _validate() {
-    if (titleController.text.trim().isEmpty) {
-      return ProductStrings.errorTitleRequired;
-    }
-    final price =
-        double.tryParse(priceController.text.trim());
-    if (price == null || price < 0) {
-      return ProductStrings.errorInvalidPrice;
-    }
-    final stock =
-        int.tryParse(stockController.text.trim());
-    if (stock == null || stock < 0) {
-      return ProductStrings.errorInvalidStock;
-    }
-    if (state.selectedCategory == null ||
-        state.selectedCategory!.isEmpty) {
-      return ProductStrings.errorCategoryRequired;
-    }
-    return null;
+    return ProductFormValidator.validate(
+      title: titleController.text,
+      price: priceController.text,
+      stock: stockController.text,
+      selectedCategory: state.selectedCategory,
+    );
   }
 
-  Future<void> saveProduct(BuildContext context) async {
+  Future<ProductFormSubmissionResult> saveProduct() async {
     final validationError = _validate();
     if (validationError != null) {
-      _showSnack(context, validationError);
-      return;
+      return ProductFormSubmissionResult.failure(validationError);
     }
     final current = state.product;
     if (current == null) {
-      _showSnack(context, ProductStrings.errorSaveFailed);
-      return;
+      return const ProductFormSubmissionResult.failure(
+        ProductStrings.errorSaveFailed,
+      );
     }
 
     final updated = current.copyWith(
@@ -165,21 +156,16 @@ class EditProductController extends Notifier<EditProductState> {
     try {
       await _productsRepo.updateProduct(updated);
       _syncService.syncAll().ignore();
-      if (!context.mounted) return;
-      _showSnack(context, ProductStrings.saveSuccess);
-      context.pop();
+      return const ProductFormSubmissionResult.success(
+        ProductStrings.saveSuccess,
+      );
     } catch (_) {
-      if (!context.mounted) return;
-      _showSnack(context, ProductStrings.errorSaveFailed);
+      return const ProductFormSubmissionResult.failure(
+        ProductStrings.errorSaveFailed,
+      );
     } finally {
       _setLoading(false);
     }
-  }
-
-  void _showSnack(BuildContext context, String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message)),
-    );
   }
 
   void _setLoading(bool value) {

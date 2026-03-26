@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:iconsax/iconsax.dart';
 import 'package:offline_first_app/core/constants/app_colors.dart';
 import 'package:offline_first_app/core/constants/app_layout.dart';
@@ -23,10 +24,28 @@ class ProductsView extends ConsumerStatefulWidget {
 }
 
 class _ProductsViewState extends ConsumerState<ProductsView> {
+  late final ScrollController _scrollController;
+
   @override
   void initState() {
     super.initState();
-    ref.read(productsControllerProvider);
+    _scrollController = ScrollController()..addListener(_onScroll);
+  }
+
+  @override
+  void dispose() {
+    _scrollController
+      ..removeListener(_onScroll)
+      ..dispose();
+    super.dispose();
+  }
+
+  void _onScroll() {
+    if (!_scrollController.hasClients) return;
+    final position = _scrollController.position;
+    if (position.pixels >= position.maxScrollExtent - 200) {
+      ref.read(productsControllerProvider.notifier).tryLoadMore();
+    }
   }
 
   @override
@@ -100,7 +119,7 @@ class _ProductsViewState extends ConsumerState<ProductsView> {
                     : state.products.isEmpty
                         ? const LoadingIndicator()
                         : ListView.builder(
-                            controller: controller.scrollController,
+                            controller: _scrollController,
                             padding: AppPaddings.only(
                               left: AppPaddings.base,
                               right: AppPaddings.base,
@@ -119,10 +138,8 @@ class _ProductsViewState extends ConsumerState<ProductsView> {
                               return ProductCard(
                                 key: ValueKey(product.id),
                                 product: product,
-                                onTap: () => controller.navigateToDetail(
-                                  context,
-                                  product.id,
-                                ),
+                                onTap: () =>
+                                    context.push('/product/${product.id}'),
                               );
                             },
                           ),
@@ -136,7 +153,7 @@ class _ProductsViewState extends ConsumerState<ProductsView> {
           bottom: AppLayout.bottomNavBarHeight,
         ),
         child: FloatingActionButton(
-          onPressed: () => controller.navigateToAddProduct(context),
+          onPressed: () => context.push('/product/add'),
           backgroundColor: AppColors.primary,
           child: Icon(
             Iconsax.add,

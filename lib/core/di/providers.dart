@@ -8,28 +8,34 @@ import 'package:offline_first_app/data/repositories/products_repository.dart';
 import 'package:offline_first_app/services/connectivity_service.dart';
 import 'package:offline_first_app/services/sync_service.dart';
 
+Never _missingOverride(String providerName) {
+  throw StateError(
+    '$providerName must be overridden in the root ProviderScope.',
+  );
+}
+
 final appDatabaseProvider = Provider<AppDatabase>((ref) {
-  throw UnimplementedError('appDatabaseProvider must be overridden');
+  _missingOverride('appDatabaseProvider');
 });
 
 final apiClientProvider = Provider<ApiClient>((ref) {
-  throw UnimplementedError('apiClientProvider must be overridden');
+  _missingOverride('apiClientProvider');
 });
 
 final productsRepositoryProvider = Provider<ProductsRepository>((ref) {
-  throw UnimplementedError('productsRepositoryProvider must be overridden');
+  _missingOverride('productsRepositoryProvider');
 });
 
 final categoriesRepositoryProvider = Provider<CategoriesRepository>((ref) {
-  throw UnimplementedError('categoriesRepositoryProvider must be overridden');
+  _missingOverride('categoriesRepositoryProvider');
 });
 
 final connectivityServiceProvider = Provider<ConnectivityService>((ref) {
-  throw UnimplementedError('connectivityServiceProvider must be overridden');
+  _missingOverride('connectivityServiceProvider');
 });
 
 final syncServiceProvider = Provider<SyncService>((ref) {
-  throw UnimplementedError('syncServiceProvider must be overridden');
+  _missingOverride('syncServiceProvider');
 });
 
 final connectivityStatusProvider = StreamProvider<bool>((ref) {

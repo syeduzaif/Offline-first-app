@@ -2,7 +2,6 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 import 'package:offline_first_app/core/constants/strings/app_strings.dart';
 import 'package:offline_first_app/core/di/providers.dart';
 import 'package:offline_first_app/data/repositories/categories_repository.dart';
@@ -10,6 +9,8 @@ import 'package:offline_first_app/data/repositories/products_repository.dart';
 import 'package:offline_first_app/domain/models/category.dart';
 import 'package:offline_first_app/domain/models/product.dart';
 import 'package:offline_first_app/services/sync_service.dart';
+import 'package:offline_first_app/ui/views/product_form/product_form_submission_result.dart';
+import 'package:offline_first_app/ui/views/product_form/product_form_validator.dart';
 
 @immutable
 class AddProductState {
@@ -82,31 +83,18 @@ class AddProductController extends Notifier<AddProductState> {
   }
 
   String? _validate() {
-    if (titleController.text.trim().isEmpty) {
-      return ProductStrings.errorTitleRequired;
-    }
-    final price =
-        double.tryParse(priceController.text.trim());
-    if (price == null || price < 0) {
-      return ProductStrings.errorInvalidPrice;
-    }
-    final stock =
-        int.tryParse(stockController.text.trim());
-    if (stock == null || stock < 0) {
-      return ProductStrings.errorInvalidStock;
-    }
-    if (state.selectedCategory == null ||
-        state.selectedCategory!.isEmpty) {
-      return ProductStrings.errorCategoryRequired;
-    }
-    return null;
+    return ProductFormValidator.validate(
+      title: titleController.text,
+      price: priceController.text,
+      stock: stockController.text,
+      selectedCategory: state.selectedCategory,
+    );
   }
 
-  Future<void> saveProduct(BuildContext context) async {
+  Future<ProductFormSubmissionResult> saveProduct() async {
     final validationError = _validate();
     if (validationError != null) {
-      _showSnack(context, validationError);
-      return;
+      return ProductFormSubmissionResult.failure(validationError);
     }
 
     final product = Product(
@@ -123,21 +111,16 @@ class AddProductController extends Notifier<AddProductState> {
     try {
       await _productsRepo.createProduct(product);
       _syncService.syncAll().ignore();
-      if (!context.mounted) return;
-      _showSnack(context, ProductStrings.createSuccess);
-      context.pop();
+      return const ProductFormSubmissionResult.success(
+        ProductStrings.createSuccess,
+      );
     } catch (_) {
-      if (!context.mounted) return;
-      _showSnack(context, ProductStrings.errorSaveFailed);
+      return const ProductFormSubmissionResult.failure(
+        ProductStrings.errorSaveFailed,
+      );
     } finally {
       _setLoading(false);
     }
-  }
-
-  void _showSnack(BuildContext context, String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message)),
-    );
   }
 
   void _setLoading(bool value) {

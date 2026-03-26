@@ -33,6 +33,8 @@ void callbackDispatcher() {
       syncService.dispose();
       return true;
     } finally {
+      // Always close the isolate-local database in finally.
+      // On iOS, leaving a background isolate DB open can corrupt WAL state.
       await db.close();
     }
   });
@@ -74,16 +76,12 @@ Future<void> main() async {
   syncService.initialize();
 
   // Workmanager (background sync)
-  await Workmanager().initialize(
-    callbackDispatcher,
-  );
+  await Workmanager().initialize(callbackDispatcher);
   await Workmanager().registerPeriodicTask(
     'offline-first-sync',
     'backgroundSync',
     frequency: const Duration(minutes: 15),
-    constraints: Constraints(
-      networkType: NetworkType.connected,
-    ),
+    constraints: Constraints(networkType: NetworkType.connected),
   );
 
   // Initial data fetch (silently fails if offline)
@@ -116,7 +114,7 @@ class MyApp extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final router = ref.watch(goRouterProvider);
+    final router = ref.read(goRouterProvider);
 
     return ScreenUtilInit(
       designSize: const Size(440, 956),

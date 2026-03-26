@@ -10,7 +10,7 @@ import 'package:offline_first_app/ui/views/product_detail/widgets/product_image_
 import 'package:offline_first_app/ui/views/product_detail/widgets/product_info_section_wdiget.dart';
 import 'package:offline_first_app/ui/widgets/loading_indicator_wdiget.dart';
 
-class ProductDetailView extends ConsumerStatefulWidget {
+class ProductDetailView extends ConsumerWidget {
   const ProductDetailView({
     super.key,
     required this.productId,
@@ -19,24 +19,11 @@ class ProductDetailView extends ConsumerStatefulWidget {
   final int productId;
 
   @override
-  ConsumerState<ProductDetailView> createState() =>
-      _ProductDetailViewState();
-}
-
-class _ProductDetailViewState extends ConsumerState<ProductDetailView> {
-  @override
-  void initState() {
-    super.initState();
-    ref
-        .read(productDetailControllerProvider.notifier)
-        .initialize(widget.productId);
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final state = ref.watch(productDetailControllerProvider);
+  Widget build(BuildContext context, WidgetRef ref) {
+    final state = ref.watch(productDetailControllerProvider(productId));
     final controller =
-        ref.read(productDetailControllerProvider.notifier);
+        ref.read(productDetailControllerProvider(productId).notifier);
+
     final product = state.product;
     if (product == null) {
       return const Scaffold(
@@ -70,7 +57,6 @@ class _ProductDetailViewState extends ConsumerState<ProductDetailView> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Image gallery
             Container(
               color: AppColors.primaryLighter,
               child: ProductImageGallery(
@@ -78,7 +64,6 @@ class _ProductDetailViewState extends ConsumerState<ProductDetailView> {
                 thumbnail: product.thumbnail,
               ),
             ),
-            // Info section
             ProductInfoSection(product: product),
           ],
         ),
@@ -109,11 +94,18 @@ class _ProductDetailViewState extends ConsumerState<ProductDetailView> {
     );
     if (result != true) return;
 
-    await controller.deleteProduct();
-    if (!context.mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text(ProductStrings.deleteSuccess)),
-    );
-    context.pop();
+    try {
+      await controller.deleteProduct();
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text(ProductStrings.deleteSuccess)),
+      );
+      context.pop();
+    } catch (_) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text(ProductStrings.errorDeleteFailed)),
+      );
+    }
   }
 }
