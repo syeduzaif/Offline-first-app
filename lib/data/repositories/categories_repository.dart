@@ -4,9 +4,8 @@ import 'package:offline_first_app/data/local/daos/categories_dao.dart';
 import 'package:offline_first_app/data/remote/api_client.dart';
 import 'package:offline_first_app/data/remote/dtos/category_dto.dart';
 import 'package:offline_first_app/domain/models/category.dart';
-import 'package:offline_first_app/domain/repositories/i_categories_repository.dart';
 
-class CategoriesRepository implements ICategoriesRepository {
+class CategoriesRepository {
   CategoriesRepository({
     required this.categoriesDao,
     required this.apiClient,
@@ -15,7 +14,6 @@ class CategoriesRepository implements ICategoriesRepository {
   final CategoriesDao categoriesDao;
   final ApiClient apiClient;
 
-  @override
   Stream<List<ProductCategory>> watchCategories() =>
       categoriesDao.watchAll().map(
             (rows) => rows
@@ -27,12 +25,15 @@ class CategoriesRepository implements ICategoriesRepository {
                 .toList(),
           );
 
-  @override
   Future<void> refreshCategories() async {
     final response = await apiClient.getCategories();
-    final list = (response.data as List)
-        .map((json) =>
-            CategoryDto.fromJson(json as Map<String, dynamic>))
+    final data = response.data;
+    if (data is! List) return;
+    final list = data
+        .whereType<Map>()
+        .map((json) => CategoryDto.fromJson(
+              json.cast<String, dynamic>(),
+            ))
         .toList();
     final companions = list
         .map((dto) => CategoriesCompanion.insert(

@@ -11,9 +11,8 @@ import 'package:offline_first_app/data/remote/api_client.dart';
 import 'package:offline_first_app/data/remote/dtos/product_dto.dart';
 import 'package:offline_first_app/domain/models/product.dart';
 import 'package:offline_first_app/domain/models/sync_status.dart';
-import 'package:offline_first_app/domain/repositories/i_products_repository.dart';
 
-class ProductsRepository implements IProductsRepository {
+class ProductsRepository {
   ProductsRepository({
     required this.productsDao,
     required this.syncQueueDao,
@@ -25,6 +24,8 @@ class ProductsRepository implements IProductsRepository {
   final SyncQueueDao syncQueueDao;
   final ApiClient apiClient;
   final AppDatabase database;
+
+  int _newLocalId() => -DateTime.now().microsecondsSinceEpoch;
 
   Product _toDomain(db.Product row) {
     List<String> images = [];
@@ -76,32 +77,27 @@ class ProductsRepository implements IProductsRepository {
     );
   }
 
-  @override
   Stream<List<Product>> watchProducts() =>
       productsDao.watchAllProducts().map(
             (rows) => rows.map(_toDomain).toList(),
           );
 
-  @override
   Stream<Product?> watchProduct(int id) =>
       productsDao.watchProduct(id).map(
             (row) => row != null ? _toDomain(row) : null,
           );
 
-  @override
   Stream<List<Product>> searchProducts(String query) =>
       productsDao.searchProducts(query).map(
             (rows) => rows.map(_toDomain).toList(),
           );
 
-  @override
   Stream<List<Product>> watchProductsByCategory(
           String category) =>
       productsDao.watchByCategory(category).map(
             (rows) => rows.map(_toDomain).toList(),
           );
 
-  @override
   Future<int> refreshProducts({
     int limit = 20,
     int skip = 0,
@@ -124,10 +120,11 @@ class ProductsRepository implements IProductsRepository {
     return (data['total'] as num?)?.toInt() ?? 0;
   }
 
-  @override
   Future<Product> createProduct(Product product) async {
     final now = DateTime.now();
+    final localId = _newLocalId();
     final companion = ProductsCompanion(
+      id: Value(localId),
       title: Value(product.title),
       description: Value(product.description),
       price: Value(product.price),
@@ -144,9 +141,6 @@ class ProductsRepository implements IProductsRepository {
       isDeleted: const Value(false),
     );
 
-    final id =
-        await productsDao.upsertProduct(companion);
-
     final payload = {
       'title': product.title,
       'description': product.description,
@@ -157,23 +151,25 @@ class ProductsRepository implements IProductsRepository {
       'category': product.category,
     };
 
-    await syncQueueDao.enqueue(SyncQueueCompanion(
-      operation: const Value('create'),
-      entityType: const Value('product'),
-      entityId: Value(id),
-      payload: Value(jsonEncode(payload)),
-      createdAt: Value(now),
-    ));
+    await database.transaction(() async {
+      await productsDao.upsertProduct(companion);
+      await syncQueueDao.enqueue(SyncQueueCompanion(
+        operation: const Value('create'),
+        entityType: const Value('product'),
+        entityId: Value(localId),
+        payload: Value(jsonEncode(payload)),
+        createdAt: Value(now),
+      ));
+    });
 
     return product.copyWith(
-      id: id,
+      id: localId,
       syncStatus: SyncStatus.pending,
       lastModified: now,
       isLocalOnly: true,
     );
   }
 
-  @override
   Future<Product> updateProduct(Product product) async {
     final now = DateTime.now();
     final companion = ProductsCompanion(
@@ -193,8 +189,6 @@ class ProductsRepository implements IProductsRepository {
       lastModified: Value(now),
     );
 
-    await productsDao.upsertProduct(companion);
-
     final payload = {
       'title': product.title,
       'description': product.description,
@@ -205,13 +199,16 @@ class ProductsRepository implements IProductsRepository {
       'category': product.category,
     };
 
-    await syncQueueDao.enqueue(SyncQueueCompanion(
-      operation: const Value('update'),
-      entityType: const Value('product'),
-      entityId: Value(product.id),
-      payload: Value(jsonEncode(payload)),
-      createdAt: Value(now),
-    ));
+    await database.transaction(() async {
+      await productsDao.upsertProduct(companion);
+      await syncQueueDao.enqueue(SyncQueueCompanion(
+        operation: const Value('update'),
+        entityType: const Value('product'),
+        entityId: Value(product.id),
+        payload: Value(jsonEncode(payload)),
+        createdAt: Value(now),
+      ));
+    });
 
     return product.copyWith(
       syncStatus: SyncStatus.pending,
@@ -219,20 +216,19 @@ class ProductsRepository implements IProductsRepository {
     );
   }
 
-  @override
   Future<void> deleteProduct(int id) async {
-    await productsDao.softDeleteProduct(id);
-
-    await syncQueueDao.enqueue(SyncQueueCompanion(
-      operation: const Value('delete'),
-      entityType: const Value('product'),
-      entityId: Value(id),
-      payload: const Value('{}'),
-      createdAt: Value(DateTime.now()),
-    ));
+    await database.transaction(() async {
+      await productsDao.softDeleteProduct(id);
+      await syncQueueDao.enqueue(SyncQueueCompanion(
+        operation: const Value('delete'),
+        entityType: const Value('product'),
+        entityId: Value(id),
+        payload: const Value('{}'),
+        createdAt: Value(DateTime.now()),
+      ));
+    });
   }
 
-  @override
   Future<Product?> getProduct(int id) async {
     final row = await productsDao.getProduct(id);
     return row != null ? _toDomain(row) : null;
