@@ -33,7 +33,7 @@ class MainView extends ConsumerWidget {
             child: BottomNavBar(
               selectedIndex: currentIndex,
               onTabChange: (i) =>
-                  ref.read(currentTabProvider.notifier).setTab(i),
+                  ref.read(currentTabProvider.notifier).state = i,
               pendingSyncCount: pendingCount,
             ),
           ),

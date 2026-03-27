@@ -155,9 +155,8 @@ class _ProductsViewState extends ConsumerState<ProductsView> {
     _searchDebounce?.cancel();
     _searchDebounce = Timer(
       const Duration(milliseconds: 300),
-      () => ref
-          .read(productsSearchQueryProvider.notifier)
-          .setQuery(query),
+      () => ref.read(productsSearchQueryProvider.notifier).state =
+          query,
     );
   }
 
@@ -221,7 +220,7 @@ class _ProductsViewState extends ConsumerState<ProductsView> {
               onSelected: (slug) => ref
                   .read(
                       productsSelectedCategoryProvider.notifier)
-                  .setCategory(slug),
+                  .state = slug,
             ),
             SizedBox(height: AppLayout.height12),
             // Product list
