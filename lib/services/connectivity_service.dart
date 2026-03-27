@@ -1,18 +1,14 @@
 import 'dart:async';
 
 import 'package:connectivity_plus/connectivity_plus.dart';
-import 'package:stacked/stacked.dart';
+import 'package:flutter/foundation.dart';
 
-class ConnectivityService with ListenableServiceMixin {
-  ConnectivityService() {
-    listenToReactiveValues([_isOnline]);
-  }
-
+class ConnectivityService extends ChangeNotifier {
   final _connectivity = Connectivity();
   StreamSubscription<List<ConnectivityResult>>? _subscription;
 
-  final ReactiveValue<bool> _isOnline = ReactiveValue<bool>(true);
-  bool get isOnline => _isOnline.value;
+  bool _isOnline = true;
+  bool get isOnline => _isOnline;
 
   final _controller = StreamController<bool>.broadcast();
   Stream<bool> get onConnectivityChanged => _controller.stream;
@@ -27,15 +23,17 @@ class ConnectivityService with ListenableServiceMixin {
   void _updateStatus(List<ConnectivityResult> results) {
     final online =
         results.any((r) => r != ConnectivityResult.none);
-    if (_isOnline.value != online) {
-      _isOnline.value = online;
+    if (_isOnline != online) {
+      _isOnline = online;
       _controller.add(online);
       notifyListeners();
     }
   }
 
+  @override
   void dispose() {
     _subscription?.cancel();
     _controller.close();
+    super.dispose();
   }
 }
