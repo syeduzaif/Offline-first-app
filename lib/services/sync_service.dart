@@ -6,26 +6,25 @@ import 'package:offline_first_app/data/local/daos/products_dao.dart';
 import 'package:offline_first_app/data/local/daos/sync_queue_dao.dart';
 import 'package:offline_first_app/data/remote/api_client.dart';
 import 'package:offline_first_app/services/connectivity_service.dart';
-import 'package:stacked/stacked.dart';
 
-class SyncService with ListenableServiceMixin {
+class SyncService {
   SyncService({
     required this.syncQueueDao,
     required this.productsDao,
     required this.apiClient,
     required this.connectivityService,
-  }) {
-    listenToReactiveValues([_isSyncing]);
-  }
+  });
 
   final SyncQueueDao syncQueueDao;
   final ProductsDao productsDao;
   final ApiClient apiClient;
   final ConnectivityService connectivityService;
 
-  final ReactiveValue<bool> _isSyncing =
-      ReactiveValue<bool>(false);
-  bool get isSyncing => _isSyncing.value;
+  bool _isSyncing = false;
+  bool get isSyncing => _isSyncing;
+
+  final _syncingController = StreamController<bool>.broadcast();
+  Stream<bool> get onSyncingChanged => _syncingController.stream;
 
   StreamSubscription<bool>? _connectivitySub;
 
@@ -38,11 +37,9 @@ class SyncService with ListenableServiceMixin {
   }
 
   Future<void> syncAll() async {
-    if (_isSyncing.value || !connectivityService.isOnline) {
-      return;
-    }
-    _isSyncing.value = true;
-    notifyListeners();
+    if (_isSyncing || !connectivityService.isOnline) return;
+    _isSyncing = true;
+    _syncingController.add(true);
 
     try {
       final operations =
@@ -51,8 +48,8 @@ class SyncService with ListenableServiceMixin {
         await _processOperation(op);
       }
     } finally {
-      _isSyncing.value = false;
-      notifyListeners();
+      _isSyncing = false;
+      _syncingController.add(false);
     }
   }
 
@@ -94,5 +91,6 @@ class SyncService with ListenableServiceMixin {
 
   void dispose() {
     _connectivitySub?.cancel();
+    _syncingController.close();
   }
 }
