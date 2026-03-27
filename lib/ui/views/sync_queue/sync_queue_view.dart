@@ -1,31 +1,24 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:iconsax/iconsax.dart';
 import 'package:offline_first_app/core/constants/app_colors.dart';
 import 'package:offline_first_app/core/constants/app_layout.dart';
 import 'package:offline_first_app/core/constants/app_paddings.dart';
 import 'package:offline_first_app/core/constants/app_text_styles.dart';
 import 'package:offline_first_app/core/constants/strings/app_strings.dart';
-import 'package:offline_first_app/ui/views/sync_queue/sync_queue_viewmodel.dart';
+import 'package:offline_first_app/core/providers/providers.dart';
 import 'package:offline_first_app/ui/views/sync_queue/widgets/sync_operation_card_wdiget.dart';
 import 'package:offline_first_app/ui/widgets/empty_state_wdiget.dart';
-import 'package:stacked/stacked.dart';
 
-class SyncQueueView
-    extends StackedView<SyncQueueViewModel> {
+class SyncQueueView extends ConsumerWidget {
   const SyncQueueView({super.key});
 
   @override
-  void onViewModelReady(SyncQueueViewModel viewModel) {
-    viewModel.initialize();
-    super.onViewModelReady(viewModel);
-  }
+  Widget build(BuildContext context, WidgetRef ref) {
+    final operationsAsync = ref.watch(syncOperationsProvider);
+    final operations = operationsAsync.valueOrNull ?? [];
+    final isSyncing = ref.watch(isSyncingProvider);
 
-  @override
-  Widget builder(
-    BuildContext context,
-    SyncQueueViewModel viewModel,
-    Widget? child,
-  ) {
     return Scaffold(
       backgroundColor: AppColors.primaryLighter,
       body: SafeArea(
@@ -48,7 +41,7 @@ class SyncQueueView
                       style: AppTextStyles.h3.bold,
                     ),
                   ),
-                  if (viewModel.isSyncing)
+                  if (isSyncing)
                     SizedBox(
                       width: AppLayout.iconSizeMdSm,
                       height: AppLayout.iconSizeMdSm,
@@ -69,13 +62,35 @@ class SyncQueueView
                   _ActionButton(
                     label: SyncStrings.syncNow,
                     icon: Iconsax.refresh,
-                    onTap: viewModel.syncNow,
+                    onTap: () => ref
+                        .read(syncServiceProvider)
+                        .syncAll()
+                        .catchError((Object _) {
+                      if (context.mounted) {
+                        ScaffoldMessenger.of(context)
+                            .showSnackBar(const SnackBar(
+                          content:
+                              Text(SyncStrings.syncFailed),
+                        ));
+                      }
+                    }),
                   ),
                   SizedBox(width: AppLayout.width12),
                   _ActionButton(
                     label: SyncStrings.clearCompleted,
                     icon: Iconsax.trash,
-                    onTap: viewModel.clearCompleted,
+                    onTap: () => ref
+                        .read(syncServiceProvider)
+                        .clearCompleted()
+                        .catchError((Object _) {
+                      if (context.mounted) {
+                        ScaffoldMessenger.of(context)
+                            .showSnackBar(const SnackBar(
+                          content:
+                              Text(SyncStrings.syncFailed),
+                        ));
+                      }
+                    }),
                   ),
                 ],
               ),
@@ -83,31 +98,43 @@ class SyncQueueView
             SizedBox(height: AppLayout.height12),
             // Operations list
             Expanded(
-              child: viewModel.operations.isEmpty
+              child: operationsAsync.hasError
                   ? EmptyState(
-                      message:
-                          SyncStrings.noOperations,
+                      message: CommonStrings.labelError,
+                      icon: Iconsax.warning_2,
+                    )
+                  : operations.isEmpty
+                  ? EmptyState(
+                      message: SyncStrings.noOperations,
                       icon: Iconsax.tick_circle,
                     )
                   : ListView.builder(
                       padding: AppPaddings.only(
                         left: AppPaddings.base,
                         right: AppPaddings.base,
-                        bottom: AppLayout
-                                .bottomNavBarHeight +
-                            AppPaddings.base +
-                            AppPaddings.large,
+                        bottom:
+                            AppLayout.bottomNavBarHeight +
+                                AppPaddings.base +
+                                AppPaddings.large,
                       ),
-                      itemCount:
-                          viewModel.operations.length,
+                      itemCount: operations.length,
                       itemBuilder: (context, index) {
-                        final op =
-                            viewModel.operations[index];
+                        final op = operations[index];
                         return SyncOperationCard(
                           key: ValueKey(op.id),
                           operation: op,
-                          onRetry: () => viewModel
-                              .retryOperation(op.id),
+                          onRetry: () => ref
+                              .read(syncServiceProvider)
+                              .retryOperation(op.id)
+                              .catchError((Object _) {
+                            if (context.mounted) {
+                              ScaffoldMessenger.of(context)
+                                  .showSnackBar(const SnackBar(
+                                content: Text(
+                                    SyncStrings.syncFailed),
+                              ));
+                            }
+                          }),
                         );
                       },
                     ),
@@ -117,11 +144,6 @@ class SyncQueueView
       ),
     );
   }
-
-  @override
-  SyncQueueViewModel viewModelBuilder(
-          BuildContext context) =>
-      SyncQueueViewModel();
 }
 
 class _ActionButton extends StatelessWidget {

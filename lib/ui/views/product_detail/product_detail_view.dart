@@ -1,15 +1,18 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:iconsax/iconsax.dart';
 import 'package:offline_first_app/core/constants/app_colors.dart';
 import 'package:offline_first_app/core/constants/app_layout.dart';
-import 'package:offline_first_app/ui/views/product_detail/product_detail_viewmodel.dart';
+import 'package:offline_first_app/core/constants/strings/app_strings.dart';
+import 'package:offline_first_app/core/providers/providers.dart';
+import 'package:offline_first_app/domain/models/product.dart';
 import 'package:offline_first_app/ui/views/product_detail/widgets/product_image_gallery_wdiget.dart';
 import 'package:offline_first_app/ui/views/product_detail/widgets/product_info_section_wdiget.dart';
+import 'package:offline_first_app/ui/widgets/error_retry_wdiget.dart';
 import 'package:offline_first_app/ui/widgets/loading_indicator_wdiget.dart';
-import 'package:stacked/stacked.dart';
 
-class ProductDetailView
-    extends StackedView<ProductDetailViewModel> {
+class ProductDetailView extends ConsumerWidget {
   const ProductDetailView({
     super.key,
     required this.productId,
@@ -18,23 +21,44 @@ class ProductDetailView
   final int productId;
 
   @override
-  void onViewModelReady(ProductDetailViewModel viewModel) {
-    viewModel.initialize(productId);
-    super.onViewModelReady(viewModel);
+  Widget build(BuildContext context, WidgetRef ref) {
+    final productAsync =
+        ref.watch(productDetailProvider(productId));
+
+    return productAsync.when(
+      loading: () => const Scaffold(body: LoadingIndicator()),
+      error: (_, _) => Scaffold(
+        appBar: AppBar(),
+        body: ErrorRetry(
+          message: CommonStrings.labelError,
+          onRetry: () => ref.invalidate(productDetailProvider(productId)),
+        ),
+      ),
+      data: (product) {
+        if (product == null) {
+          return Scaffold(
+            appBar: AppBar(),
+            body: ErrorRetry(
+              message: ProductStrings.noProducts,
+              onRetry: () => ref.invalidate(
+                productDetailProvider(productId),
+              ),
+            ),
+          );
+        }
+        return _ProductDetailContent(product: product);
+      },
+    );
   }
+}
+
+class _ProductDetailContent extends ConsumerWidget {
+  const _ProductDetailContent({required this.product});
+
+  final Product product;
 
   @override
-  Widget builder(
-    BuildContext context,
-    ProductDetailViewModel viewModel,
-    Widget? child,
-  ) {
-    final product = viewModel.product;
-    if (product == null) {
-      return const Scaffold(
-        body: LoadingIndicator(),
-      );
-    }
+  Widget build(BuildContext context, WidgetRef ref) {
     return Scaffold(
       backgroundColor: AppColors.white,
       appBar: AppBar(
@@ -45,7 +69,8 @@ class ProductDetailView
               Iconsax.edit,
               size: AppLayout.iconSizeMd,
             ),
-            onPressed: viewModel.navigateToEdit,
+            onPressed: () =>
+                context.push('/product/${product.id}/edit'),
           ),
           IconButton(
             icon: Icon(
@@ -53,7 +78,8 @@ class ProductDetailView
               size: AppLayout.iconSizeMd,
               color: AppColors.failedText,
             ),
-            onPressed: viewModel.deleteProduct,
+            onPressed: () =>
+                _showDeleteConfirmation(context, ref),
           ),
         ],
       ),
@@ -61,7 +87,6 @@ class ProductDetailView
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Image gallery
             Container(
               color: AppColors.primaryLighter,
               child: ProductImageGallery(
@@ -69,7 +94,6 @@ class ProductDetailView
                 thumbnail: product.thumbnail,
               ),
             ),
-            // Info section
             ProductInfoSection(product: product),
           ],
         ),
@@ -77,8 +101,36 @@ class ProductDetailView
     );
   }
 
-  @override
-  ProductDetailViewModel viewModelBuilder(
-          BuildContext context) =>
-      ProductDetailViewModel();
+  Future<void> _showDeleteConfirmation(
+      BuildContext context, WidgetRef ref) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text(ProductStrings.deleteProduct),
+        content: const Text(ProductStrings.confirmDelete),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text(CommonStrings.actionCancel),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text(CommonStrings.actionDelete),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    await ref
+        .read(productsRepositoryProvider)
+        .deleteProduct(product.id);
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(ProductStrings.deleteSuccess),
+        ),
+      );
+      Navigator.of(context).pop();
+    }
+  }
 }

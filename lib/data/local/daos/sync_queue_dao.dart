@@ -26,7 +26,7 @@ class SyncQueueDao extends DatabaseAccessor<AppDatabase>
   Future<List<SyncQueueData>> getPendingOperations() =>
       (select(syncQueue)
             ..where((t) =>
-                t.status.isIn(['pending', 'failed']))
+                t.status.isIn(['pending', 'failed', 'inProgress']))
             ..where(
                 (t) => t.retryCount.isSmallerThanValue(3))
             ..orderBy([(t) => OrderingTerm.asc(t.createdAt)]))
@@ -65,6 +65,13 @@ class SyncQueueDao extends DatabaseAccessor<AppDatabase>
 
   Future<void> resetToPending(int opId) =>
       (update(syncQueue)..where((t) => t.id.equals(opId)))
+          .write(const SyncQueueCompanion(
+        status: Value('pending'),
+      ));
+
+  Future<void> resetInProgressToPending() =>
+      (update(syncQueue)
+            ..where((t) => t.status.equals('inProgress')))
           .write(const SyncQueueCompanion(
         status: Value('pending'),
       ));
