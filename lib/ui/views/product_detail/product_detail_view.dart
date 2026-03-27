@@ -70,7 +70,7 @@ class _ProductDetailContent extends ConsumerWidget {
               size: AppLayout.iconSizeMd,
             ),
             onPressed: () =>
-                context.push('/edit-product', extra: product),
+                context.push('/product/${product.id}/edit'),
           ),
           IconButton(
             icon: Icon(

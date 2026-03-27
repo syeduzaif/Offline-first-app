@@ -274,8 +274,7 @@ class _ProductsViewState extends ConsumerState<ProductsView> {
                                 key: ValueKey(product.id),
                                 product: product,
                                 onTap: () => context.push(
-                                  '/product-detail',
-                                  extra: product.id,
+                                  '/product/${product.id}',
                                 ),
                               );
                             },
@@ -290,7 +289,7 @@ class _ProductsViewState extends ConsumerState<ProductsView> {
           bottom: AppLayout.bottomNavBarHeight,
         ),
         child: FloatingActionButton(
-          onPressed: () => context.push('/add-product'),
+          onPressed: () => context.push('/product/add'),
           backgroundColor: AppColors.primary,
           child: Icon(
             Iconsax.add,
