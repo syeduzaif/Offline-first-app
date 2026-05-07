@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Read(//Users/admin/Documents/teacher-app/lib/**)",
+      "Read(//Users/admin/Documents/teacher-app/**)"
+    ],
+    "additionalDirectories": [
+      "/Users/admin/Documents/teacher-app/lib/app"
+    ]
+  }
+}
